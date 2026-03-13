@@ -290,6 +290,12 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
           </div>
           <div class="field-hint">8桁の数字だけ入力（Gは自動でつきます）</div>
         </div>
+        <!-- 車体番号 -->
+        <div class="field-group">
+          <div class="field-label">車体番号 <span class="ocr-badge" id="frame-ocr-badge">手入力</span></div>
+          <input type="text" class="field-input" id="inp-frame" placeholder="3205612" maxlength="20" style="font-size:18px;letter-spacing:1px">
+          <div class="field-hint">フレーム番号（任意）</div>
+        </div>
         <div class="field-group">
           <div class="field-label">
             税抜合計
@@ -362,7 +368,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
       <!-- 伝票番号検索 -->
       <div style="display:flex;align-items:center;gap:8px;background:#111f38;border:1px solid #2a4070;border-radius:12px;padding:8px 14px;margin-bottom:8px">
         <span style="font-size:16px">🔍</span>
-        <input type="text" id="search-inp" placeholder="番号で検索（例: 121）" oninput="renderHistory()" inputmode="numeric"
+        <input type="text" id="search-inp" placeholder="伝票番号 or 車体番号で検索" oninput="renderHistory()" inputmode="numeric"
           style="flex:1;background:none;border:none;color:#e8edf5;font-size:14px;outline:none;font-family:inherit">
         <button onclick="document.getElementById('search-inp').value='';renderHistory()" style="background:none;border:none;color:#5a7aa8;cursor:pointer;font-size:14px;padding:0">✕</button>
       </div>
@@ -703,19 +709,20 @@ async function runOCR(base64) {
     const slipNum   = extractSlipNumber(text);
     const total     = extractTotal(text);
     const company   = extractCompany(text);
-    const issueDate = extractIssueDate(text);  // 注文書発行日
+    const frameNum  = extractFrameNumber(text);  // 車体番号
+    const issueDate = extractIssueDate(text);
 
-    console.log("=== OCR ===", {slipNum, total, company, issueDate});
+    console.log("=== OCR ===", {slipNum, total, company, frameNum, issueDate});
 
     setTimeout(() => {
       document.getElementById("loading-box").style.display = "none";
       realScanTime = new Date();
 
       if (!company) {
-        pendingOCRData = {slipNum, total, issueDate, issueDateOCR: !!issueDate};
+        pendingOCRData = {slipNum, total, issueDate, frameNum, issueDateOCR: !!issueDate};
         document.getElementById("company-modal").classList.add("show");
       } else {
-        showInputForm(slipNum, total, company, issueDate, !!issueDate);
+        showInputForm(slipNum, total, company, issueDate, !!issueDate, frameNum);
       }
     }, 300);
 
@@ -723,7 +730,7 @@ async function runOCR(base64) {
     console.error(e);
     document.getElementById("loading-box").style.display = "none";
     realScanTime = new Date();
-    pendingOCRData = {slipNum:"", total:null, issueDate:null, issueDateOCR:false};
+    pendingOCRData = {slipNum:"", total:null, issueDate:null, frameNum:"", issueDateOCR:false};
     document.getElementById("company-modal").classList.add("show");
   }
 }
@@ -804,6 +811,13 @@ function extractCompany(text) {
   return null;
 }
 
+function extractFrameNumber(text) {
+  // 「フレーム」の後の数字のみ抽出（「店」など非数字は除去）
+  const m = text.match(/フレ[ーレ]ム[\s　]*([0-9A-Za-z]+)/);
+  if (m) return m[1].replace(/[^\d]/g, ""); // 数字のみ
+  return "";
+}
+
 function extractPaymentMonth(text) {
   // 「支払予定日」の近くの月を探す（後方互換用）
   const m = text.match(/支払[^\n]{0,10}[Rr令和]\s*\d+\s*年\s*(\d{1,2})\s*月/);
@@ -873,13 +887,25 @@ function billingMonthKey(d) {
 }
 
 // ── Input Form ─────────────────────────────────────────────────────────────
-function showInputForm(slipNum, total, company, issueDate, issueDateOCR) {
+function showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNum) {
   const form = document.getElementById("input-form");
   const slipInp = document.getElementById("inp-slip");
   const amtInp  = document.getElementById("inp-amt");
+  const frameInp = document.getElementById("inp-frame");
 
   slipInp.value = slipNum || "";
   amtInp.value  = total || "";
+  if (frameInp) frameInp.value = frameNum || "";
+
+  selectCompanyForm(company || null, true);
+
+  // OCRバッジ（車体番号）
+  const frameBadge = document.getElementById("frame-ocr-badge");
+  if (frameBadge) {
+    frameBadge.textContent = frameNum ? "OCR ✓" : "手入力";
+    frameBadge.style.background = frameNum ? "rgba(34,197,94,0.2)" : "#1e3050";
+    frameBadge.style.color = frameNum ? "#4ade80" : "#5a7aa8";
+  }
 
   selectCompanyForm(company || null, true);
 
@@ -1099,9 +1125,9 @@ function getSelectedCompany() {
 function selectCompanyModal(company) {
   document.getElementById("company-modal").classList.remove("show");
   if (pendingOCRData) {
-    const {slipNum, total, issueDate, issueDateOCR} = pendingOCRData;
+    const {slipNum, total, issueDate, frameNum, issueDateOCR} = pendingOCRData;
     pendingOCRData = null;
-    showInputForm(slipNum, total, company, issueDate, issueDateOCR);
+    showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNum);
   }
 }
 
@@ -1127,6 +1153,7 @@ function confirmAndSave() {
   const slipVal = slipDigits ? "G" + slipDigits : "";
   const amtVal  = parseInt(document.getElementById("inp-amt").value);
   const company = getSelectedCompany();
+  const frameVal = (document.getElementById("inp-frame")?.value || "").trim();
 
   let ok = true;
   const slipInp = document.getElementById("inp-slip");
@@ -1171,6 +1198,7 @@ function confirmAndSave() {
     tax_rate: taxRate,
     company,
     billing_month: bmKey,
+    frame_number: frameVal || "",
   };
 
   // 重複チェック
@@ -1291,7 +1319,10 @@ function renderHistory() {
 
   let filtered = history;
   if (currentCoTab !== "all") filtered = filtered.filter(h => h.company === currentCoTab);
-  if (searchVal)   filtered = filtered.filter(h => h.slip_number.replace(/^G/,"").startsWith(searchVal));
+  if (searchVal)   filtered = filtered.filter(h =>
+    h.slip_number.replace(/^G/,"").startsWith(searchVal) ||
+    (h.frame_number && h.frame_number.includes(searchVal))
+  );
   if (dateVal)     filtered = filtered.filter(h => (h.collection_date || h.real_scanned_at || h.scanned_at).startsWith(dateVal));
   if (filterReplaced) filtered = filtered.filter(h => !!h.replaced_from);
 
@@ -1342,6 +1373,7 @@ function renderHistory() {
                 ${isReplaced ? '<span style="font-size:9px;background:#d97706;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">差替済</span>' : ""}
               </div>
               <div class="hist-time">集計日: ${cdDisp}　<span style="color:#5a7aa8">📷 ${scanStr}</span><span class="hist-tax-badge">税${item.tax_rate}%</span></div>
+              ${item.frame_number ? `<div style="font-size:10px;color:#7a9cc8;margin-top:1px">🚗 ${item.frame_number}</div>` : ""}
               ${isReplaced ? `<div style="font-size:10px;color:#d97706;margin-top:2px">差替前: ${fmt(item.replaced_from)}円 → ${fmt(item.total_excl_tax)}円</div>` : ""}
             </div>
           </div>
@@ -1449,6 +1481,7 @@ function renderHistory() {
                   ${isDup&&!isReplaced ? '<span style="font-size:9px;background:#c0392b;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">⚠️重複</span>' : ""}
                 </div>
                 <div class="hist-time" style="color:#7a9cc8;font-size:10px">${scanDateDisp}<span class="hist-tax-badge">税${item.tax_rate}%</span></div>
+                ${item.frame_number ? `<div style="font-size:10px;color:#7a9cc8;margin-top:1px">🚗 ${item.frame_number}</div>` : ""}
                 ${isReplaced ? `<div style="font-size:10px;color:#d97706;margin-top:2px">差替前: ${fmt(item.replaced_from)}円 → ${fmt(item.total_excl_tax)}円</div>` : ""}
               </div>
             </div>
