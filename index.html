@@ -128,6 +128,8 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 .co-badge-nets{background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);color:#60a5fa;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;white-space:nowrap}
 .co-tab{flex:1;padding:8px 4px;background:none;border:none;font-size:11px;font-weight:700;cursor:pointer;border-radius:8px;transition:background 0.15s;font-family:inherit;color:#5a7aa8}
 .co-tab.active{background:#1e3050;color:#e8edf5}
+/* Drum roll */
+.drum-item{height:44px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#f0c744;transition:opacity 0.1s}
 .day-block{margin-bottom:20px;background:#0f1e36;border-radius:14px;overflow:hidden;border:1px solid #1e3050}
 .day-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#111f38;border-bottom:1px solid #1e3050}
 .day-date{font-size:13px;font-weight:700;color:#a8bde8}
@@ -259,15 +261,22 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
           </div>
         </div>
 
-        <!-- 集計月 -->
+        <!-- 集計日 -->
         <div class="field-group">
-          <div class="field-label">集計月 <span class="ocr-badge" id="bm-ocr-badge">手入力</span></div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <button onclick="adjustBillingMonth(-1)" style="background:#1e3050;border:1px solid #2a4070;border-radius:8px;width:36px;height:36px;color:#e8edf5;font-size:18px;cursor:pointer;flex-shrink:0">‹</button>
-            <div id="billing-month-disp" style="flex:1;background:#0d1829;border:1px solid #2a4070;border-radius:8px;padding:10px;text-align:center;font-size:16px;font-weight:700;color:#f0c744">—</div>
-            <button onclick="adjustBillingMonth(1)" style="background:#1e3050;border:1px solid #2a4070;border-radius:8px;width:36px;height:36px;color:#e8edf5;font-size:18px;cursor:pointer;flex-shrink:0">›</button>
+          <div class="field-label">集計日 <span class="ocr-badge" id="cd-ocr-badge">手入力</span></div>
+          <div style="display:flex;gap:8px;margin-bottom:6px">
+            <!-- 月ドラム -->
+            <div style="flex:1;position:relative;overflow:hidden;height:44px;background:#0d1829;border:1px solid #2a4070;border-radius:8px">
+              <div id="drum-month" style="position:absolute;width:100%;transition:transform 0.2s;cursor:ns-resize;user-select:none"></div>
+            </div>
+            <!-- 日ドラム -->
+            <div style="width:80px;position:relative;overflow:hidden;height:44px;background:#0d1829;border:1px solid #2a4070;border-radius:8px">
+              <div id="drum-day" style="position:absolute;width:100%;transition:transform 0.2s;cursor:ns-resize;user-select:none"></div>
+            </div>
           </div>
-          <div class="field-hint">支払予定日の前月が集計月になります</div>
+          <div style="font-size:11px;color:#5a7aa8">発行日ベース（予定表の日付）で入力してください</div>
+          <!-- スキャン日時表示 -->
+          <div id="scan-datetime-disp" style="font-size:11px;color:#7a9cc8;margin-top:4px">📷 スキャン日時：—</div>
         </div>
 
         <div class="field-group">
@@ -366,6 +375,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
           <button onclick="document.getElementById('date-filter').value='';renderHistory()" style="background:none;border:none;color:#5a7aa8;cursor:pointer;font-size:12px;padding:0">✕</button>
         </div>
         <button id="filter-replaced-btn" onclick="toggleReplacedFilter()" style="background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:6px 10px;color:#7a9cc8;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">差替済のみ</button>
+        <button id="sort-btn" onclick="toggleSort()" style="background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:6px 10px;color:#7a9cc8;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📷スキャン順</button>
       </div>
     </div>
     <div id="history-content"></div>
@@ -506,9 +516,12 @@ let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
 let currentTab = "scan";
-let currentCoTab = "all";  // 会社フィルター: all / chiba / nets
-let pendingOCRData = null; // OCR結果の一時保存（会社選択待ち）
-let currentBillingMonth = null; // 選択中の集計月 (Date object)
+let currentCoTab = "all";
+let pendingOCRData = null;
+let currentBillingMonth = null; // 後方互換用（使わなくなる）
+let currentCollectionDate = null; // 集計日 (Date object) ← 新
+let sortByScanned = false; // false=集計日順, true=スキャン日順
+let realScanTime = null; // 今回のスキャン日時
 
 // ── Firestore Storage ──────────────────────────────────────────────────────
 async function fsGet(key) {
@@ -687,30 +700,30 @@ async function runOCR(base64) {
 
     setLoadingText("完了！", 100);
 
-    const slipNum     = extractSlipNumber(text);
-    const total       = extractTotal(text);
-    const company     = extractCompany(text);
-    const paymentMonth = extractPaymentMonth(text);
-    const billingMonth = calcBillingMonth(paymentMonth);
+    const slipNum   = extractSlipNumber(text);
+    const total     = extractTotal(text);
+    const company   = extractCompany(text);
+    const issueDate = extractIssueDate(text);  // 注文書発行日
 
-    console.log("=== OCR ===", {slipNum, total, company, paymentMonth, billingMonth});
+    console.log("=== OCR ===", {slipNum, total, company, issueDate});
 
     setTimeout(() => {
       document.getElementById("loading-box").style.display = "none";
+      realScanTime = new Date();
 
       if (!company) {
-        // 会社不明 → 2択モーダルを先に表示
-        pendingOCRData = {slipNum, total, billingMonth, paymentOCR: !!paymentMonth};
+        pendingOCRData = {slipNum, total, issueDate, issueDateOCR: !!issueDate};
         document.getElementById("company-modal").classList.add("show");
       } else {
-        showInputForm(slipNum, total, company, billingMonth, !!paymentMonth);
+        showInputForm(slipNum, total, company, issueDate, !!issueDate);
       }
     }, 300);
 
   } catch(e) {
     console.error(e);
     document.getElementById("loading-box").style.display = "none";
-    pendingOCRData = {slipNum:"", total:null, billingMonth:null, paymentOCR:false};
+    realScanTime = new Date();
+    pendingOCRData = {slipNum:"", total:null, issueDate:null, issueDateOCR:false};
     document.getElementById("company-modal").classList.add("show");
   }
 }
@@ -792,10 +805,9 @@ function extractCompany(text) {
 }
 
 function extractPaymentMonth(text) {
-  // 「支払予定日」の近くの月を探す
+  // 「支払予定日」の近くの月を探す（後方互換用）
   const m = text.match(/支払[^\n]{0,10}[Rr令和]\s*\d+\s*年\s*(\d{1,2})\s*月/);
   if (m) return parseInt(m[1]);
-  // 支払予定日ラベルの次の行も探す
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].includes("支払")) {
@@ -807,6 +819,37 @@ function extractPaymentMonth(text) {
       }
     }
   }
+  return null;
+}
+
+function extractIssueDate(text) {
+  // 「注文書発行日」「発行日」の近くの日付を探す
+  // パターン: R8年1月15日 / 令和8年1月15日 / 26年1月15日
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes("発行日") || lines[i].includes("注文書発行")) {
+      const nearby = lines.slice(i, i+3).join(" ");
+      // R8年1月15日 / 令和8年1月15日
+      let m = nearby.match(/[Rr令和]\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+      if (m) {
+        const rYear = parseInt(m[1]);
+        const month = parseInt(m[2]);
+        const day   = parseInt(m[3]);
+        const year  = rYear + 2018; // R1=2019なのでR6=2024, R8=2026
+        return new Date(year, month-1, day);
+      }
+      // 26年1月15日 (西暦下2桁)
+      m = nearby.match(/(\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+      if (m) {
+        const shortYear = parseInt(m[1]);
+        const month = parseInt(m[2]);
+        const day   = parseInt(m[3]);
+        const year  = shortYear + 2000;
+        return new Date(year, month-1, day);
+      }
+    }
+  }
+  // 見つからなければ今日
   return null;
 }
 
@@ -830,7 +873,7 @@ function billingMonthKey(d) {
 }
 
 // ── Input Form ─────────────────────────────────────────────────────────────
-function showInputForm(slipNum, total, company, billingMonth, paymentOCR) {
+function showInputForm(slipNum, total, company, issueDate, issueDateOCR) {
   const form = document.getElementById("input-form");
   const slipInp = document.getElementById("inp-slip");
   const amtInp  = document.getElementById("inp-amt");
@@ -838,16 +881,20 @@ function showInputForm(slipNum, total, company, billingMonth, paymentOCR) {
   slipInp.value = slipNum || "";
   amtInp.value  = total || "";
 
-  // 会社ボタン選択状態
   selectCompanyForm(company || null, true);
 
-  // 集計月
-  currentBillingMonth = billingMonth || (() => {
-    // デフォルト：今月の前月
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth() - 1, 1);
-  })();
-  updateBillingMonthDisp(paymentOCR && !!billingMonth);
+  // 集計日セット（発行日OCR > スキャン日）
+  const now = realScanTime || new Date();
+  currentCollectionDate = issueDate || now;
+  initDrum(currentCollectionDate, issueDateOCR);
+
+  // スキャン日時表示
+  const scanDisp = document.getElementById("scan-datetime-disp");
+  if (scanDisp) {
+    const ds = now.toLocaleDateString("ja-JP",{month:"long",day:"numeric"});
+    const ts = now.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
+    scanDisp.textContent = `📷 スキャン日時：${ds} ${ts}`;
+  }
 
   // OCRバッジ
   const slipBadge = document.getElementById("slip-ocr-badge");
@@ -862,13 +909,11 @@ function showInputForm(slipNum, total, company, billingMonth, paymentOCR) {
   form.style.display = "block";
   calcPreview();
 
-  // 会社ボタンと保存ボタンが両方見える位置に自動スクロール
   setTimeout(() => {
     const body = document.querySelector(".body");
     const formTop = form.offsetTop;
     const formH = form.offsetHeight;
     const viewH = body.clientHeight;
-    // フォームが画面に収まる場合はformのtop、収まらない場合は下部ボタンが見える位置
     const scrollTo = formH <= viewH ? formTop : formTop + formH - viewH;
     body.scrollTo({top: scrollTo, behavior: "smooth"});
   }, 100);
@@ -877,12 +922,146 @@ function showInputForm(slipNum, total, company, billingMonth, paymentOCR) {
   else if (!total) amtInp.focus();
 }
 
+// ── Drum Roll ───────────────────────────────────────────────────────────────
+// 表示する月リスト（今月基準で±4ヶ月 = 9ヶ月）
+function buildMonthList() {
+  const now = new Date();
+  const list = [];
+  for (let i = -4; i <= 4; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    list.push({year: d.getFullYear(), month: d.getMonth()+1});
+  }
+  return list;
+}
+
+const ITEM_H = 44;
+
+function initDrum(date, isOCR) {
+  const monthList = buildMonthList();
+  const targetYear = date.getFullYear();
+  const targetMonth = date.getMonth()+1;
+  const targetDay = date.getDate();
+
+  // 月インデックス
+  let mIdx = monthList.findIndex(m => m.year===targetYear && m.month===targetMonth);
+  if (mIdx < 0) mIdx = Math.floor(monthList.length/2);
+
+  // 日数
+  const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+
+  renderDrumMonth(monthList, mIdx);
+  renderDrumDay(daysInMonth, targetDay - 1);
+  setupDrumTouch("drum-month", monthList.length, mIdx, (newIdx) => {
+    const m = monthList[newIdx];
+    const maxDay = new Date(m.year, m.month, 0).getDate();
+    const curDay = currentCollectionDate.getDate();
+    const day = Math.min(curDay, maxDay);
+    currentCollectionDate = new Date(m.year, m.month-1, day);
+    renderDrumDay(maxDay, day-1);
+    updateCdBadge(false);
+  });
+  setupDrumTouch("drum-day", daysInMonth, targetDay-1, (newIdx) => {
+    currentCollectionDate = new Date(
+      currentCollectionDate.getFullYear(),
+      currentCollectionDate.getMonth(),
+      newIdx + 1
+    );
+    updateCdBadge(false);
+  });
+
+  updateCdBadge(isOCR);
+}
+
+function renderDrumMonth(monthList, activeIdx) {
+  const el = document.getElementById("drum-month");
+  if (!el) return;
+  el.innerHTML = monthList.map((m, i) => {
+    const label = `${m.year !== new Date().getFullYear() ? m.year+'/' : ''}${m.month}月`;
+    return `<div class="drum-item" style="opacity:${i===activeIdx?1:0.35}">${label}</div>`;
+  }).join("");
+  el.style.transform = `translateY(${-activeIdx * ITEM_H}px)`;
+}
+
+function renderDrumDay(daysInMonth, activeIdx) {
+  const el = document.getElementById("drum-day");
+  if (!el) return;
+  el.innerHTML = Array.from({length: daysInMonth}, (_,i) =>
+    `<div class="drum-item" style="opacity:${i===activeIdx?1:0.35}">${i+1}日</div>`
+  ).join("");
+  el.style.transform = `translateY(${-activeIdx * ITEM_H}px)`;
+}
+
+function setupDrumTouch(elId, itemCount, startIdx, onChange) {
+  const wrap = document.getElementById(elId)?.parentElement;
+  const inner = document.getElementById(elId);
+  if (!wrap || !inner) return;
+
+  let curIdx = startIdx;
+  let startY = 0;
+  let startOffset = -startIdx * ITEM_H;
+  let curOffset = startOffset;
+
+  function clamp(idx) { return Math.max(0, Math.min(itemCount-1, idx)); }
+
+  function applyOffset(offset, animate) {
+    inner.style.transition = animate ? "transform 0.2s" : "none";
+    inner.style.transform = `translateY(${offset}px)`;
+  }
+
+  function updateActive(idx) {
+    inner.querySelectorAll(".drum-item").forEach((el,i) => {
+      el.style.opacity = i===idx ? "1" : "0.35";
+    });
+  }
+
+  function onStart(y) {
+    startY = y;
+    startOffset = curOffset;
+    inner.style.transition = "none";
+  }
+
+  function onMove(y) {
+    const diff = y - startY;
+    const newOffset = startOffset + diff;
+    const minOffset = -(itemCount-1)*ITEM_H;
+    curOffset = Math.max(minOffset, Math.min(0, newOffset));
+    applyOffset(curOffset, false);
+  }
+
+  function onEnd() {
+    curIdx = clamp(Math.round(-curOffset / ITEM_H));
+    curOffset = -curIdx * ITEM_H;
+    applyOffset(curOffset, true);
+    updateActive(curIdx);
+    onChange(curIdx);
+  }
+
+  wrap.addEventListener("touchstart", e => { onStart(e.touches[0].clientY); }, {passive:true});
+  wrap.addEventListener("touchmove",  e => { onMove(e.touches[0].clientY); e.preventDefault(); }, {passive:false});
+  wrap.addEventListener("touchend",   () => onEnd());
+  wrap.addEventListener("mousedown",  e => { onStart(e.clientY); });
+  wrap.addEventListener("mousemove",  e => { if(e.buttons) onMove(e.clientY); });
+  wrap.addEventListener("mouseup",    () => onEnd());
+  wrap.addEventListener("mouseleave", () => { if(startY) onEnd(); });
+}
+
+function updateCdBadge(isOCR) {
+  const badge = document.getElementById("cd-ocr-badge");
+  if (!badge) return;
+  badge.textContent = isOCR ? "OCR ✓" : "手入力";
+  badge.style.background = isOCR ? "rgba(34,197,94,0.2)" : "#1e3050";
+  badge.style.color = isOCR ? "#4ade80" : "#5a7aa8";
+}
+
+// 後方互換用（他の場所から呼ばれる可能性がある空関数）
+function adjustBillingMonth() {}
+function updateBillingMonthDisp() {}
+
 function selectCompanyForm(company, silent) {
   const btnChiba = document.getElementById("co-btn-chiba");
   const btnNets  = document.getElementById("co-btn-nets");
   const badge    = document.getElementById("co-ocr-badge");
 
-  // リセット
   btnChiba.style.borderColor = "#3a1a1a";
   btnChiba.style.background  = "#1a0e0e";
   btnNets.style.borderColor  = "#1a2a3a";
@@ -916,28 +1095,13 @@ function getSelectedCompany() {
   return null;
 }
 
-function updateBillingMonthDisp(isOCR) {
-  const disp = document.getElementById("billing-month-disp");
-  const badge = document.getElementById("bm-ocr-badge");
-  disp.textContent = currentBillingMonth ? billingMonthStr(currentBillingMonth) : "—";
-  badge.textContent = isOCR ? "OCR ✓" : "手入力";
-  badge.style.background = isOCR ? "rgba(34,197,94,0.2)" : "#1e3050";
-  badge.style.color = isOCR ? "#4ade80" : "#5a7aa8";
-}
-
-function adjustBillingMonth(delta) {
-  if (!currentBillingMonth) currentBillingMonth = new Date();
-  currentBillingMonth = new Date(currentBillingMonth.getFullYear(), currentBillingMonth.getMonth() + delta, 1);
-  updateBillingMonthDisp(false);
-}
-
 // 会社モーダルから選択
 function selectCompanyModal(company) {
   document.getElementById("company-modal").classList.remove("show");
   if (pendingOCRData) {
-    const {slipNum, total, billingMonth, paymentOCR} = pendingOCRData;
+    const {slipNum, total, issueDate, issueDateOCR} = pendingOCRData;
     pendingOCRData = null;
-    showInputForm(slipNum, total, company, billingMonth, paymentOCR);
+    showInputForm(slipNum, total, company, issueDate, issueDateOCR);
   }
 }
 
@@ -987,21 +1151,26 @@ function confirmAndSave() {
   const tax  = Math.round(amtVal * taxRate / 100);
   const incl = amtVal + tax;
 
-  // 集計月の月末日付をscanned_atに使う（billing_monthベース）
-  const bm = currentBillingMonth || new Date();
-  const lastDay = new Date(bm.getFullYear(), bm.getMonth()+1, 0);
-  lastDay.setHours(23, 59, 59, 0);
+  // 集計日（ドラムで選んだ日）
+  const cd = currentCollectionDate || new Date();
+  const cdKey = `${cd.getFullYear()}-${String(cd.getMonth()+1).padStart(2,"0")}-${String(cd.getDate()).padStart(2,"0")}`;
+  const bmKey = `${cd.getFullYear()}-${String(cd.getMonth()+1).padStart(2,"0")}`;
+
+  // scanned_at は後方互換用に集計月末に設定
+  const lastDay = new Date(cd.getFullYear(), cd.getMonth()+1, 0);
+  lastDay.setHours(23,59,59,0);
 
   const entry = {
     id: Date.now(),
-    scanned_at: lastDay.toISOString(),   // 集計月の月末で保存
-    real_scanned_at: new Date().toISOString(), // 実際のスキャン日時
+    scanned_at: lastDay.toISOString(),          // 後方互換（集計月末）
+    real_scanned_at: (realScanTime || new Date()).toISOString(), // 実際のスキャン日時
+    collection_date: cdKey,                      // 集計日 "YYYY-MM-DD"
     slip_number: slipVal,
     total_excl_tax: amtVal,
     tax, incl,
     tax_rate: taxRate,
-    company,                              // "chiba" | "nets"
-    billing_month: billingMonthKey(bm),  // "2026-02"
+    company,
+    billing_month: bmKey,
   };
 
   // 重複チェック
@@ -1121,10 +1290,9 @@ function renderHistory() {
   const dateVal   = document.getElementById("date-filter")?.value || "";
 
   let filtered = history;
-  // 会社フィルター
   if (currentCoTab !== "all") filtered = filtered.filter(h => h.company === currentCoTab);
   if (searchVal)   filtered = filtered.filter(h => h.slip_number.replace(/^G/,"").startsWith(searchVal));
-  if (dateVal)     filtered = filtered.filter(h => h.scanned_at.startsWith(dateVal));
+  if (dateVal)     filtered = filtered.filter(h => (h.collection_date || h.real_scanned_at || h.scanned_at).startsWith(dateVal));
   if (filterReplaced) filtered = filtered.filter(h => !!h.replaced_from);
 
   if (filtered.length===0) {
@@ -1134,22 +1302,71 @@ function renderHistory() {
     return;
   }
 
-  // 全履歴から重複マップ
+  // ヘルパー：集計日キー "YYYY-MM-DD"
+  const getCollectionDateKey = item => {
+    if (item.collection_date) return item.collection_date;
+    // 旧データ：real_scanned_at の日付
+    const src = item.real_scanned_at || item.scanned_at;
+    const d = new Date(src);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  };
+  const getBillingKey = item => item.billing_month || getCollectionDateKey(item).slice(0,7);
+
+  // ── ソート: スキャン日順 ──
+  if (sortByScanned) {
+    const sorted = [...filtered].sort((a,b)=> {
+      const ta = new Date(a.real_scanned_at||a.scanned_at);
+      const tb = new Date(b.real_scanned_at||b.scanned_at);
+      return tb - ta;
+    });
+    const coLabel = co => co==="chiba" ? "🟥 千葉トヨタ" : co==="nets" ? "🟦 ネッツトヨタ" : "";
+    const coBorderStyle = co => co==="chiba" ? "border-left:4px solid #ef4444;" : co==="nets" ? "border-left:4px solid #3b82f6;" : "";
+    el.innerHTML = `<div style="background:#1e3050;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#7a9cc8">📷 スキャン日時順で表示中</div>` +
+      sorted.map((item,idx) => {
+        const isReplaced = !!item.replaced_from;
+        const co = item.company;
+        const borderStyle = isReplaced ? "border-left:4px solid #d97706;" : coBorderStyle(co);
+        const scanDt = new Date(item.real_scanned_at||item.scanned_at);
+        const scanStr = scanDt.toLocaleDateString("ja-JP",{month:"long",day:"numeric"}) + " " +
+          scanDt.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
+        const cdKey = getCollectionDateKey(item);
+        const cdDisp = (() => { const [y,m,d] = cdKey.split("-"); return `${parseInt(m)}/${parseInt(d)}`; })();
+        return `
+        <div class="hist-card" style="${borderStyle}">
+          <div class="hist-left">
+            <span class="hist-idx">${idx+1}</span>
+            <div style="flex:1;min-width:0">
+              <div class="hist-slip">
+                ${item.slip_number}
+                ${co ? `<span class="co-badge-${co}">${coLabel(co)}</span>` : ""}
+                ${isReplaced ? '<span style="font-size:9px;background:#d97706;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">差替済</span>' : ""}
+              </div>
+              <div class="hist-time">集計日: ${cdDisp}　<span style="color:#5a7aa8">📷 ${scanStr}</span><span class="hist-tax-badge">税${item.tax_rate}%</span></div>
+              ${isReplaced ? `<div style="font-size:10px;color:#d97706;margin-top:2px">差替前: ${fmt(item.replaced_from)}円 → ${fmt(item.total_excl_tax)}円</div>` : ""}
+            </div>
+          </div>
+          <div class="hist-right">
+            <div class="h-row"><span class="h-l">税抜</span><span class="h-v">${fmt(item.total_excl_tax)}</span></div>
+            <div class="h-row"><span class="h-l" style="color:#e05a2b">消費税</span><span class="h-v" style="color:#e05a2b">${fmt(item.tax)}</span></div>
+            <div class="h-row"><span class="h-l" style="color:#f0c744">税込</span><span class="h-v" style="color:#f0c744;font-weight:800">${fmt(item.incl)}</span></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+            <button style="background:none;border:1px solid #2a4070;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:13px;color:#5a7aa8" onclick="openEdit(${item.id})">✏️</button>
+            <button class="del-btn" onclick="openDel(${item.id})">🗑</button>
+          </div>
+        </div>`;
+      }).join("");
+    return;
+  }
+
+  // ── 通常：集計日（予定表）ベース表示 ──
   const slipMap = {};
   history.forEach(item => {
-    const key = billingMonthKey(new Date(item.scanned_at));
     if(!slipMap[item.slip_number]) slipMap[item.slip_number] = [];
-    slipMap[item.slip_number].push({key, id: item.id, scanned_at: item.scanned_at});
+    slipMap[item.slip_number].push(item);
   });
 
-  // billing_monthでグループ化（なければscanned_atの月）
-  const getBillingKey = item => item.billing_month || billingMonthKey(new Date(item.scanned_at));
-  const getBillingLabel = item => {
-    const k = getBillingKey(item);
-    const [y,m] = k.split("-");
-    return `${y}年${parseInt(m)}月分`;
-  };
-
+  // 集計月でグループ化
   const monthGrouped = {};
   filtered.forEach(item => {
     const mk = getBillingKey(item);
@@ -1157,15 +1374,20 @@ function renderHistory() {
     monthGrouped[mk].push(item);
   });
 
-  // 月キーを降順ソート
   const sortedMonthKeys = Object.keys(monthGrouped).sort((a,b) => b.localeCompare(a));
   const isFiltering = searchVal||dateVal||filterReplaced;
-
   const coLabel = co => co==="chiba" ? "🟥 千葉トヨタ" : co==="nets" ? "🟦 ネッツトヨタ" : "";
   const coBorderStyle = co => co==="chiba" ? "border-left:4px solid #ef4444;" : co==="nets" ? "border-left:4px solid #3b82f6;" : "";
 
   el.innerHTML = sortedMonthKeys.map(mk => {
-    const mItems = monthGrouped[mk].sort((a,b)=>new Date(a.scanned_at)-new Date(b.scanned_at));
+    // 集計月内のアイテムを集計日昇順→スキャン日昇順でソート
+    const mItems = monthGrouped[mk].sort((a,b) => {
+      const da = getCollectionDateKey(a);
+      const db = getCollectionDateKey(b);
+      if (da !== db) return da.localeCompare(db);
+      return new Date(a.real_scanned_at||a.scanned_at) - new Date(b.real_scanned_at||b.scanned_at);
+    });
+
     const mExcl  = mItems.reduce((a,i)=>a+(i.total_excl_tax||0),0);
     const mTax   = mItems.reduce((a,i)=>a+(i.tax||0),0);
     const mIncl  = mItems.reduce((a,i)=>a+(i.incl||0),0);
@@ -1173,24 +1395,79 @@ function renderHistory() {
     const monthLabel = `${y}年${parseInt(m)}月分`;
     const mId = mk.replace("-","");
 
-    // 日（実際のスキャン日）でさらにグループ化
+    // 集計日でグループ化
     const dayGrouped = {};
     mItems.forEach(item => {
-      const d = new Date(item.real_scanned_at || item.scanned_at)
-        .toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"short"});
-      if(!dayGrouped[d]) dayGrouped[d]=[];
-      dayGrouped[d].push(item);
+      const dk = getCollectionDateKey(item);
+      if(!dayGrouped[dk]) dayGrouped[dk]=[];
+      dayGrouped[dk].push(item);
     });
 
-    const daysHtml = Object.entries(dayGrouped).map(([date, items]) => {
-      const sortedItems = [...items].sort((a,b)=>new Date(a.scanned_at)-new Date(b.scanned_at));
-      const dExcl = sortedItems.reduce((a,i)=>a+(i.total_excl_tax||0),0);
-      const dTax  = sortedItems.reduce((a,i)=>a+(i.tax||0),0);
-      const dIncl = sortedItems.reduce((a,i)=>a+(i.incl||0),0);
+    // グローバル通し番号（月内でスキャン古い順）
+    let globalIdx = 0;
+
+    const daysHtml = Object.keys(dayGrouped).sort().map(dk => {
+      const dayItems = dayGrouped[dk].sort((a,b) =>
+        new Date(a.real_scanned_at||a.scanned_at) - new Date(b.real_scanned_at||b.scanned_at)
+      );
+      const [dy, dm, dd] = dk.split("-");
+      const weekdays = ["日","月","火","水","木","金","土"];
+      const dateObj = new Date(parseInt(dy), parseInt(dm)-1, parseInt(dd));
+      const dateLabel = `${parseInt(dy)}年${parseInt(dm)}月${parseInt(dd)}日(${weekdays[dateObj.getDay()]})`;
+      const dExcl = dayItems.reduce((a,i)=>a+(i.total_excl_tax||0),0);
+      const dTax  = dayItems.reduce((a,i)=>a+(i.tax||0),0);
+      const dIncl = dayItems.reduce((a,i)=>a+(i.incl||0),0);
+
+      const cardsHtml = dayItems.map(item => {
+        globalIdx++;
+        const myIdx = globalIdx;
+        const dups = slipMap[item.slip_number];
+        const isDup = dups && dups.length > 1;
+        const isReplaced = !!item.replaced_from;
+        const dupOthers = isDup ? dups.filter(d=>d.id!==item.id) : [];
+        const isOldest = isDup && dupOthers.some(d => new Date(d.real_scanned_at||d.scanned_at) > new Date(item.real_scanned_at||item.scanned_at));
+        const co = item.company;
+        const borderStyle = isReplaced ? "border-left:4px solid #d97706;opacity:0.85;"
+          : isDup ? "border-left:4px solid #e05a2b;"
+          : coBorderStyle(co);
+        const scanDt = new Date(item.real_scanned_at||item.scanned_at);
+        const scanStr = scanDt.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
+        // 集計日とスキャン日が違う場合はスキャン日も表示
+        const scanDateKey = `${scanDt.getFullYear()}-${String(scanDt.getMonth()+1).padStart(2,"0")}-${String(scanDt.getDate()).padStart(2,"0")}`;
+        const scanDateDisp = scanDateKey !== dk
+          ? `📷 ${parseInt(scanDt.getMonth()+1)}/${parseInt(scanDt.getDate())} ${scanStr}`
+          : `📷 ${scanStr}`;
+        return `
+          <div class="hist-card" style="${borderStyle}">
+            <div class="hist-left">
+              <span class="hist-idx">${myIdx}</span>
+              <div style="flex:1;min-width:0">
+                <div class="hist-slip" style="${isDup?'color:#f87171;':''}">
+                  ${item.slip_number}
+                  ${co ? `<span class="co-badge-${co}">${coLabel(co)}</span>` : ""}
+                  ${isReplaced ? '<span style="font-size:9px;background:#d97706;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">差替済</span>' : ""}
+                  ${isDup&&!isReplaced ? '<span style="font-size:9px;background:#c0392b;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">⚠️重複</span>' : ""}
+                </div>
+                <div class="hist-time" style="color:#7a9cc8;font-size:10px">${scanDateDisp}<span class="hist-tax-badge">税${item.tax_rate}%</span></div>
+                ${isReplaced ? `<div style="font-size:10px;color:#d97706;margin-top:2px">差替前: ${fmt(item.replaced_from)}円 → ${fmt(item.total_excl_tax)}円</div>` : ""}
+              </div>
+            </div>
+            <div class="hist-right">
+              <div class="h-row"><span class="h-l">税抜</span><span class="h-v">${fmt(item.total_excl_tax)}</span></div>
+              <div class="h-row"><span class="h-l" style="color:#e05a2b">消費税</span><span class="h-v" style="color:#e05a2b">${fmt(item.tax)}</span></div>
+              <div class="h-row"><span class="h-l" style="color:#f0c744">税込</span><span class="h-v" style="color:#f0c744;font-weight:800">${fmt(item.incl)}</span></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+              ${isDup&&isOldest&&!isReplaced ? `<button style="background:linear-gradient(135deg,#d97706,#b45309);border:none;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:11px;color:#fff;font-weight:700;white-space:nowrap" onclick="openReplace(${item.id})">差替</button>` : ""}
+              <button style="background:none;border:1px solid #2a4070;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:13px;color:#5a7aa8" onclick="openEdit(${item.id})">✏️</button>
+              <button class="del-btn" onclick="openDel(${item.id})">🗑</button>
+            </div>
+          </div>`;
+      }).join("");
 
       return `
         <div class="day-block" style="margin-bottom:10px">
-          <div class="day-header"><span class="day-date">${date}</span><span class="day-count">${sortedItems.length}枚</span></div>
+          <div class="day-header"><span class="day-date">${dateLabel}</span><span class="day-count">${dayItems.length}枚</span></div>
           ${isFiltering ? "" : `
           <div class="day-summary">
             <div class="d-sum-row"><span class="d-sum-label">税　抜　計</span><span class="d-sum-val">${fmt(dExcl)} 円</span></div>
@@ -1199,43 +1476,7 @@ function renderHistory() {
             <div class="d-sum-div"></div>
             <div class="d-sum-row"><span class="d-sum-label" style="color:#f0c744">税　込　計</span><span class="d-sum-val" style="color:#f0c744;font-weight:800;font-size:17px">${fmt(dIncl)} 円</span></div>
           </div>`}
-          ${sortedItems.map((item,idx) => {
-            const dups = slipMap[item.slip_number];
-            const isDup = dups && dups.length > 1;
-            const isReplaced = !!item.replaced_from;
-            const dupOthers = isDup ? dups.filter(d=>d.id!==item.id) : [];
-            const isOldest = isDup && dupOthers.some(d => new Date(d.scanned_at) > new Date(item.scanned_at));
-            const co = item.company;
-            const borderStyle = isReplaced ? "border-left:4px solid #d97706;opacity:0.8;"
-              : isDup ? "border-left:4px solid #e05a2b;"
-              : coBorderStyle(co);
-            return `
-            <div class="hist-card" style="${borderStyle}">
-              <div class="hist-left">
-                <span class="hist-idx">${idx+1}</span>
-                <div style="flex:1;min-width:0">
-                  <div class="hist-slip" style="${isDup?'color:#f87171;':''}">
-                    ${item.slip_number}
-                    ${co ? `<span class="co-badge-${co}">${coLabel(co)}</span>` : ""}
-                    ${isReplaced ? '<span style="font-size:9px;background:#d97706;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">差替済</span>' : ""}
-                    ${isDup&&!isReplaced ? '<span style="font-size:9px;background:#c0392b;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">⚠️重複</span>' : ""}
-                  </div>
-                  <div class="hist-time">${new Date(item.real_scanned_at||item.scanned_at).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}<span class="hist-tax-badge">税${item.tax_rate}%</span></div>
-                  ${isReplaced ? `<div style="font-size:10px;color:#d97706;margin-top:2px">差替前: ${fmt(item.replaced_from)}円 → ${fmt(item.total_excl_tax)}円</div>` : ""}
-                </div>
-              </div>
-              <div class="hist-right">
-                <div class="h-row"><span class="h-l">税抜</span><span class="h-v">${fmt(item.total_excl_tax)}</span></div>
-                <div class="h-row"><span class="h-l" style="color:#e05a2b">消費税</span><span class="h-v" style="color:#e05a2b">${fmt(item.tax)}</span></div>
-                <div class="h-row"><span class="h-l" style="color:#f0c744">税込</span><span class="h-v" style="color:#f0c744;font-weight:800">${fmt(item.incl)}</span></div>
-              </div>
-              <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-                ${isDup&&isOldest&&!isReplaced ? `<button style="background:linear-gradient(135deg,#d97706,#b45309);border:none;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:11px;color:#fff;font-weight:700;white-space:nowrap" onclick="openReplace(${item.id})">差替</button>` : ""}
-                <button style="background:none;border:1px solid #2a4070;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:13px;color:#5a7aa8" onclick="openEdit(${item.id})">✏️</button>
-                <button class="del-btn" onclick="openDel(${item.id})">🗑</button>
-              </div>
-            </div>`;
-          }).join("")}
+          ${cardsHtml}
         </div>`;
     }).join("");
 
@@ -1256,6 +1497,17 @@ function renderHistory() {
         <div id="month-${mId}">${daysHtml}</div>
       </div>`;
   }).join("");
+}
+
+function toggleSort() {
+  sortByScanned = !sortByScanned;
+  const btn = document.getElementById("sort-btn");
+  if (btn) {
+    btn.style.background = sortByScanned ? "#1e3050" : "#111f38";
+    btn.style.color = sortByScanned ? "#f0c744" : "#7a9cc8";
+    btn.textContent = sortByScanned ? "📋 集計日順" : "📷スキャン順";
+  }
+  renderHistory();
 }
 // ── Company tab ────────────────────────────────────────────────────────────
 function switchCoTab(co) {
