@@ -383,8 +383,14 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
         <button id="filter-replaced-btn" onclick="toggleReplacedFilter()" style="background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:6px 10px;color:#7a9cc8;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">差替済のみ</button>
         <button id="sort-btn" onclick="toggleSort()" style="background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:6px 10px;color:#7a9cc8;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📷スキャン順</button>
       </div>
+      <!-- 日付ナビゲーター（検索・フィルター未使用時のみ表示） -->
+      <div id="day-nav" style="display:flex;align-items:center;gap:6px;margin-top:8px">
+        <button onclick="moveDayNav(1)" style="background:#1e3050;border:1px solid #2a4070;border-radius:8px;width:38px;height:38px;color:#e8edf5;font-size:20px;cursor:pointer;flex-shrink:0">‹</button>
+        <div id="day-nav-label" style="flex:1;background:#111f38;border:1px solid #2a4070;border-radius:8px;padding:8px;text-align:center;font-size:14px;font-weight:700;color:#f0c744;cursor:pointer" onclick="resetDayNav()">—</div>
+        <button onclick="moveDayNav(-1)" style="background:#1e3050;border:1px solid #2a4070;border-radius:8px;width:38px;height:38px;color:#e8edf5;font-size:20px;cursor:pointer;flex-shrink:0">›</button>
+      </div>
     </div>
-    <div id="history-content"></div>
+    <div id="history-content" style="touch-action:pan-y"></div>
   </div>
 
   <!-- SETTINGS -->
@@ -528,6 +534,8 @@ let currentBillingMonth = null; // 後方互換用（使わなくなる）
 let currentCollectionDate = null; // 集計日 (Date object) ← 新
 let sortByScanned = false; // false=集計日順, true=スキャン日順
 let realScanTime = null; // 今回のスキャン日時
+let currentDayKey = null; // 日付ナビ: "YYYY-MM-DD" or null=最新日
+let allDayKeys = []; // 全集計日リスト（降順）
 
 // ── Firestore Storage ──────────────────────────────────────────────────────
 async function fsGet(key) {
@@ -1316,6 +1324,11 @@ function renderHistory() {
   const el = document.getElementById("history-content");
   const searchVal = (document.getElementById("search-inp")?.value || "").trim().replace(/^[Gg]/,"");
   const dateVal   = document.getElementById("date-filter")?.value || "";
+  const isFiltering = !!(searchVal || dateVal || filterReplaced || sortByScanned);
+
+  // 日付ナビの表示制御
+  const dayNav = document.getElementById("day-nav");
+  if (dayNav) dayNav.style.display = isFiltering ? "none" : "flex";
 
   let filtered = history;
   if (currentCoTab !== "all") filtered = filtered.filter(h => h.company === currentCoTab);
@@ -1398,16 +1411,31 @@ function renderHistory() {
     slipMap[item.slip_number].push(item);
   });
 
-  // 集計月でグループ化
+  // 全集計日キーを降順で収集（日付ナビ用）
+  const dayKeySet = new Set();
+  filtered.forEach(item => dayKeySet.add(getCollectionDateKey(item)));
+  allDayKeys = Array.from(dayKeySet).sort((a,b) => b.localeCompare(a));
+
+  // 現在の日付ナビキーを補正
+  if (allDayKeys.length > 0) {
+    if (!currentDayKey || !allDayKeys.includes(currentDayKey)) {
+      currentDayKey = allDayKeys[0]; // デフォルト：最新日
+    }
+  } else {
+    currentDayKey = null;
+  }
+  updateDayNavLabel();
+
+  // 日付ナビで絞り込み（フィルターなし時のみ）
+  const dayFiltered = isFiltering ? filtered : filtered.filter(item => getCollectionDateKey(item) === currentDayKey);
   const monthGrouped = {};
-  filtered.forEach(item => {
+  dayFiltered.forEach(item => {
     const mk = getBillingKey(item);
     if(!monthGrouped[mk]) monthGrouped[mk] = [];
     monthGrouped[mk].push(item);
   });
 
   const sortedMonthKeys = Object.keys(monthGrouped).sort((a,b) => b.localeCompare(a));
-  const isFiltering = searchVal||dateVal||filterReplaced;
   const coLabel = co => co==="chiba" ? "🟥 千葉トヨタ" : co==="nets" ? "🟦 ネッツトヨタ" : "";
   const coBorderStyle = co => co==="chiba" ? "border-left:4px solid #ef4444;" : co==="nets" ? "border-left:4px solid #3b82f6;" : "";
 
@@ -1542,6 +1570,56 @@ function toggleSort() {
   }
   renderHistory();
 }
+
+// ── Day Navigation ──────────────────────────────────────────────────────────
+function updateDayNavLabel() {
+  const label = document.getElementById("day-nav-label");
+  if (!label) return;
+  if (!currentDayKey || allDayKeys.length === 0) {
+    label.textContent = "—";
+    return;
+  }
+  const [y, m, d] = currentDayKey.split("-");
+  const weekdays = ["日","月","火","水","木","金","土"];
+  const dow = weekdays[new Date(parseInt(y), parseInt(m)-1, parseInt(d)).getDay()];
+  const idx = allDayKeys.indexOf(currentDayKey);
+  label.textContent = `${parseInt(m)}月${parseInt(d)}日(${dow})　${idx+1}/${allDayKeys.length}`;
+}
+
+// delta: +1=古い日(右フリック), -1=新しい日(左フリック)
+function moveDayNav(delta) {
+  if (allDayKeys.length === 0) return;
+  const idx = allDayKeys.indexOf(currentDayKey);
+  const newIdx = Math.max(0, Math.min(allDayKeys.length-1, idx + delta));
+  currentDayKey = allDayKeys[newIdx];
+  renderHistory();
+}
+
+function resetDayNav() {
+  // ラベルタップで今日 or 最新日に戻る
+  if (allDayKeys.length > 0) {
+    currentDayKey = allDayKeys[0];
+    renderHistory();
+  }
+}
+
+function initSwipe() {
+  const el = document.getElementById("history-content");
+  if (!el) return;
+  let startX = 0;
+  el.addEventListener("touchstart", e => { startX = e.touches[0].clientX; }, {passive:true});
+  el.addEventListener("touchend", e => {
+    const diff = e.changedTouches[0].clientX - startX;
+    if (Math.abs(diff) < 40) return;
+    const searchVal = document.getElementById("search-inp")?.value || "";
+    const dateVal = document.getElementById("date-filter")?.value || "";
+    if (searchVal || dateVal || filterReplaced || sortByScanned) return;
+    if (diff < 0) moveDayNav(-1); // 左フリック → 新しい日
+    else moveDayNav(1);           // 右フリック → 古い日
+  }, {passive:true});
+}
+
+document.addEventListener("DOMContentLoaded", initSwipe);
 // ── Company tab ────────────────────────────────────────────────────────────
 function switchCoTab(co) {
   currentCoTab = co;
