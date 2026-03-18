@@ -1438,7 +1438,7 @@ function renderHistory() {
     // グローバル通し番号（月内でスキャン古い順）
     let globalIdx = 0;
 
-    const daysHtml = Object.keys(dayGrouped).sort().map(dk => {
+    const daysHtml = Object.keys(dayGrouped).sort((a,b) => b.localeCompare(a)).map(dk => {
       const dayItems = dayGrouped[dk].sort((a,b) =>
         new Date(a.real_scanned_at||a.scanned_at) - new Date(b.real_scanned_at||b.scanned_at)
       );
