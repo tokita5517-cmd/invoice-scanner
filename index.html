@@ -725,12 +725,14 @@ async function runOCR(base64) {
     // ── iPhoneデバッグ表示 ──────────────────────────────
     const debugEl = document.getElementById("ocr-debug");
     if (debugEl) {
-      // フレームを含む行を抽出
+      // フレームを含む行を抽出（フレ OR 店+舗パターン）
       const frameLines = text.split("\n").filter(l => /フレ/.test(l));
+      const misenLines = text.split("\n").filter(l => /店[\s　]*舗/.test(l));
       document.getElementById("debug-frame-lines").textContent =
-        frameLines.length > 0
-          ? frameLines.map((l,i) => `[${i+1}] ${JSON.stringify(l)}`).join("\n")
-          : "（「フレ」を含む行が見つかりませんでした）";
+        [
+          frameLines.length > 0 ? "【フレあり行】\n" + frameLines.map((l,i)=>`[${i+1}] ${JSON.stringify(l)}`).join("\n") : "「フレ」含む行：なし",
+          misenLines.length > 0 ? "\n【店+舗パターン行】\n" + misenLines.map((l,i)=>`[${i+1}] ${JSON.stringify(l)}`).join("\n") : "「店+舗」パターン：なし"
+        ].join("\n");
 
       // 抽出結果
       document.getElementById("debug-extract-result").textContent =
@@ -838,68 +840,43 @@ function extractCompany(text) {
 }
 
 // ── フレーム番号OCR（改良版）────────────────────────────────────────────────
-// 注文書パターン: 「フレーム0014446店　舗　君津」
-// 「店」が番号の終端として確実に機能する
+// ★重要発見★ OCRは「フレーム」を全く違う文字に誤読する！
+// 例: "フレーム0112884" → "740112884" のように化ける
+// 対策: 「数字 + 店 + 舗」という唯一無二のパターンで特定する
 function extractFrameNumber(text) {
-  // パターン1: フレームXXXXX店（「店」で終端を明確化）← 最確実
-  let m = text.match(/フレ.{0,4}ム[\s　]*(\d{4,12})[\s　]*店/);
-  if (m) {
-    console.log("[フレーム] パターン1 hit:", m[1]);
-    return m[1];
-  }
-
-  // パターン2: 数字がスペース区切りで読まれた場合（例: 0 0 1 4 4 4 6 店）
-  m = text.match(/フレ.{0,4}ム[\s　]*([\d\s]{5,20})店/);
-  if (m) {
-    const num = m[1].replace(/\s/g, "");
-    if (num.length >= 4) {
-      console.log("[フレーム] パターン2 hit:", num);
-      return num;
-    }
-  }
-
-  // パターン3: 「店」なしでフレームの後の数字列（フォールバック）
-  m = text.match(/フレ.{0,4}ム[\s　]*(\d{4,12})/);
-  if (m) {
-    console.log("[フレーム] パターン3 hit:", m[1]);
-    return m[1];
-  }
-
-  // パターン4: 行単位で「フレ」を含む行を探す
   const lines = text.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    if (/フレ/.test(lines[i])) {
-      // その行で「店」の前の数字を優先
-      const lineM = lines[i].match(/(\d{4,12})[\s　]*店/);
-      if (lineM) {
-        console.log("[フレーム] パターン4a hit:", lineM[1]);
-        return lineM[1];
-      }
-      // 「店」がなければ4桁以上の数字の最長を返す
-      const nums = lines[i].match(/\d{4,}/g);
-      if (nums) {
-        const result = nums.sort((a,b) => b.length - a.length)[0];
-        console.log("[フレーム] パターン4b hit:", result);
-        return result;
-      }
-      // 次の行も確認
-      if (i+1 < lines.length) {
-        const nums2 = lines[i+1].match(/\d{4,}/g);
-        if (nums2) {
-          console.log("[フレーム] パターン4c hit:", nums2[0]);
-          return nums2[0];
-        }
-      }
+
+  // パターン1: XXXXX店 舗（同一行に「店」+「舗」がある場合）← 最確実
+  // 例: "0047780店 舗 市原平成通" / "740112884店 舗 南流山"
+  for (const line of lines) {
+    const m = line.match(/(\d{4,12})[\s　]*店[\s　]*舗/);
+    if (m) {
+      console.log("[フレーム] P1（店+舗）hit:", m[1], "行:", line);
+      return m[1];
     }
   }
 
-  // パターン5: Frame（英語OCR誤読対応）
-  m = text.match(/[Ff]rame[\s\-]*(\d{4,})/);
-  if (m) {
-    console.log("[フレーム] パターン5 hit:", m[1]);
-    return m[1];
+  // パターン2: 「店」で終わる行 → 次行が「舗」で始まる（改行で分かれた場合）
+  for (let i = 0; i < lines.length - 1; i++) {
+    const mA = lines[i].match(/(\d{4,12})[\s　]*店\s*$/);
+    if (mA && /^[\s　]*舗/.test(lines[i+1])) {
+      console.log("[フレーム] P2（店\\n舗）hit:", mA[1]);
+      return mA[1];
+    }
   }
 
+  // パターン3: フレームが正しく読めた場合（念のためバックアップ）
+  let m = text.match(/フレ.{0,4}ム[\s　]*(\d{4,12})[\s　]*店/);
+  if (m) { console.log("[フレーム] P3（フレーム+店）hit:", m[1]); return m[1]; }
+
+  m = text.match(/フレ.{0,4}ム[\s　]*(\d{4,12})/);
+  if (m) { console.log("[フレーム] P4（フレームのみ）hit:", m[1]); return m[1]; }
+
+  // パターン5: Frame（英語誤読）
+  m = text.match(/[Ff]rame[\s\-]*(\d{4,})/);
+  if (m) { console.log("[フレーム] P5（Frame英語）hit:", m[1]); return m[1]; }
+
+  console.log("[フレーム] 全パターン失敗");
   return "";
 }
 
