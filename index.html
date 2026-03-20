@@ -25,7 +25,6 @@
   const app = initializeApp(firebaseConfig);
   const firestore = getFirestore(app);
 
-  // グローバルにFirestore関数を公開
   window._fsDoc = doc;
   window._fsGetDoc = getDoc;
   window._fsSetDoc = setDoc;
@@ -54,7 +53,6 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 .body{flex:1;padding:14px;overflow-y:auto;padding-bottom:100px}
 .page{display:none}.page.active{display:block}
 
-/* Scan */
 .big-scan-btn{border:3px dashed #2a4070;border-radius:20px;padding:50px 24px;text-align:center;cursor:pointer;background:rgba(37,99,235,0.04);user-select:none;transition:background 0.15s}
 .big-scan-btn:active{background:rgba(37,99,235,0.12)}
 .scan-icon{font-size:64px;margin-bottom:12px}
@@ -63,14 +61,12 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 .preview-img{width:100%;border-radius:12px;margin-bottom:12px;border:1px solid #2a4070;object-fit:contain;max-height:200px;display:none}
 
-/* Loading */
 .loading-box{display:none;flex-direction:column;align-items:center;gap:12px;padding:20px 0}
 .spinner{width:44px;height:44px;border-radius:50%;border:4px solid #2a4070;border-top:4px solid #f0c744;animation:spin 0.7s linear infinite}
 .loading-text{color:#7a9cc8;font-size:14px;text-align:center}
 .loading-progress{width:100%;background:#1e3050;border-radius:4px;height:6px;overflow:hidden;margin-top:4px}
 .loading-bar{height:100%;background:linear-gradient(90deg,#2563eb,#f0c744);border-radius:4px;transition:width 0.3s;width:0%}
 
-/* Input form */
 .input-form{display:none;animation:pop 0.3s ease}
 .form-card{background:#111f38;border:1px solid #2a4070;border-radius:16px;padding:16px;margin-bottom:12px}
 .form-title{font-size:12px;color:#5a7aa8;font-weight:700;letter-spacing:2px;margin-bottom:14px}
@@ -82,7 +78,6 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 .field-input.error{border-color:#e05a2b}
 .field-hint{font-size:10px;color:#3a5070;margin-top:4px}
 
-/* Result */
 .result-section{display:none;animation:pop 0.3s ease}
 .slip-row{display:flex;align-items:center;gap:8px;background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:10px 14px;margin-bottom:10px}
 .slip-label{font-size:11px;color:#5a7aa8;font-weight:700;letter-spacing:1px;white-space:nowrap}
@@ -111,7 +106,6 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 .btn-confirm{width:100%;padding:14px 0;border-radius:12px;border:none;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:10px}
 .btn-retake{width:100%;padding:12px 0;border-radius:12px;border:1px solid #2a4070;background:transparent;color:#7a9cc8;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
 
-/* Recent bar */
 .recent-bar{background:#0a1525;border-top:1px solid #1e3050;padding:8px 12px;display:none;align-items:center;gap:8px;overflow-x:auto;position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto;z-index:5}
 .recent-bar-title{font-size:10px;color:#3a5070;font-weight:700;white-space:nowrap}
 .recent-item{display:flex;align-items:center;gap:5px;background:#111f38;border:1px solid #1e3050;border-radius:8px;padding:5px 10px;flex-shrink:0}
@@ -120,7 +114,6 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 .recent-amt{font-size:13px;font-weight:800;color:#f0c744}
 .recent-en{font-size:10px;color:#7a7040}
 
-/* History */
 .empty-box{text-align:center;padding:60px 0;color:#6b7c9d;font-size:15px}
 .co-chiba{color:#f87171}
 .co-nets{color:#60a5fa}
@@ -128,7 +121,6 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 .co-badge-nets{background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);color:#60a5fa;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;white-space:nowrap}
 .co-tab{flex:1;padding:8px 4px;background:none;border:none;font-size:11px;font-weight:700;cursor:pointer;border-radius:8px;transition:background 0.15s;font-family:inherit;color:#5a7aa8}
 .co-tab.active{background:#1e3050;color:#e8edf5}
-/* Drum roll */
 .drum-item{height:44px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#f0c744;transition:opacity 0.1s}
 .day-block{margin-bottom:20px;background:#0f1e36;border-radius:14px;overflow:hidden;border:1px solid #1e3050}
 .day-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#111f38;border-bottom:1px solid #1e3050}
@@ -151,7 +143,6 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 .h-v{font-size:12px;font-weight:700;min-width:65px;text-align:right}
 .del-btn{background:none;border:1px solid #2a4070;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:13px;color:#5a7aa8;flex-shrink:0}
 
-/* Settings */
 .settings-card{background:#111f38;border:1px solid #2a4070;border-radius:16px;padding:18px 16px;margin-bottom:14px}
 .settings-title{font-size:15px;font-weight:800;margin-bottom:10px}
 .settings-sub{font-size:13px;color:#7a9cc8;margin-bottom:12px}
@@ -168,7 +159,6 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 .howto-num{background:#2563eb;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;flex-shrink:0;margin-top:1px}
 .howto-note{margin-top:10px;font-size:12px;color:#4ade80;font-weight:600}
 
-/* Modal */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:100;padding:24px}
 .overlay.show{display:flex}
 .modal{background:#111f38;border:1px solid #2a4070;border-radius:16px;padding:28px 24px;width:100%;max-width:340px}
@@ -207,52 +197,41 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
   <div class="page active" id="page-scan">
     <canvas id="capture-canvas" style="display:none"></canvas>
 
-    <!-- カメラビューファインダー（フルスクリーンオーバーレイ） -->
     <div id="camera-view" style="display:none;position:fixed;inset:0;z-index:20;background:#000;flex-direction:column">
       <div style="position:relative;flex:1;overflow:hidden">
         <video id="camera-video" autoplay playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
-        <!-- ガイド枠 -->
         <div style="position:absolute;inset:0;pointer-events:none">
           <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);width:90%;height:88%;border:3px solid rgba(240,199,68,0.85);border-radius:10px;box-shadow:0 0 0 9999px rgba(0,0,0,0.35)"></div>
           <div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:11px;color:rgba(255,255,255,0.65)">注文書全体を枠に合わせてください</div>
         </div>
-        <!-- 閉じるボタン（左上） -->
         <button onclick="stopCamera()" style="position:absolute;top:14px;left:14px;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.3);border-radius:50%;width:42px;height:42px;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
-        <!-- 税率表示（右上） -->
         <div style="position:absolute;top:18px;right:14px;background:rgba(0,0,0,0.5);border-radius:8px;padding:4px 10px;font-size:12px;color:#f0c744;font-weight:700">税率 <span id="scan-rate-cam">10</span>%</div>
       </div>
-      <!-- シャッターボタン（常に下部に固定） -->
       <div style="background:#000;padding:16px 0 24px;display:flex;align-items:center;justify-content:center">
         <button id="shutter-btn" onclick="takePhoto()" style="width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:white;cursor:pointer;box-shadow:0 0 0 4px rgba(255,255,255,0.3);transition:transform 0.1s;font-size:26px">📷</button>
       </div>
     </div>
 
-    <!-- 起動ボタン -->
     <div class="big-scan-btn" id="btn-scan" onclick="startCamera()">
       <div class="scan-icon">📷</div>
       <div class="scan-label">カメラを起動</div>
       <div class="scan-sub">税率 <span id="scan-rate">10</span>% ／ シャッターを押して撮影</div>
     </div>
 
-    <!-- プレビュー -->
     <div id="preview-wrap" style="display:none">
       <img id="preview" class="preview-img" src="" alt="" style="display:block;margin-bottom:0;max-height:220px">
     </div>
 
-    <!-- 読み取り中 -->
     <div class="loading-box" id="loading-box">
       <div class="spinner"></div>
       <div class="loading-text" id="loading-text">読み取り中…</div>
       <div class="loading-progress"><div class="loading-bar" id="loading-bar"></div></div>
     </div>
 
-    <!-- デバッグ表示（一時的） -->
-
     <div class="input-form" id="input-form">
       <div class="form-card">
         <div class="form-title">読み取り結果を確認してください</div>
 
-        <!-- 会社 -->
         <div class="field-group">
           <div class="field-label">会社 <span class="ocr-badge" id="co-ocr-badge">手入力</span></div>
           <div style="display:flex;gap:8px">
@@ -261,21 +240,17 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
           </div>
         </div>
 
-        <!-- 集計日 -->
         <div class="field-group">
           <div class="field-label">集計日 <span class="ocr-badge" id="cd-ocr-badge">手入力</span></div>
           <div style="display:flex;gap:8px;margin-bottom:6px">
-            <!-- 月ドラム -->
             <div style="flex:1;position:relative;overflow:hidden;height:44px;background:#0d1829;border:1px solid #2a4070;border-radius:8px">
               <div id="drum-month" style="position:absolute;width:100%;transition:transform 0.2s;cursor:ns-resize;user-select:none"></div>
             </div>
-            <!-- 日ドラム -->
             <div style="width:80px;position:relative;overflow:hidden;height:44px;background:#0d1829;border:1px solid #2a4070;border-radius:8px">
               <div id="drum-day" style="position:absolute;width:100%;transition:transform 0.2s;cursor:ns-resize;user-select:none"></div>
             </div>
           </div>
           <div style="font-size:11px;color:#5a7aa8">発行日ベース（予定表の日付）で入力してください</div>
-          <!-- スキャン日時表示 -->
           <div id="scan-datetime-disp" style="font-size:11px;color:#7a9cc8;margin-top:4px">📷 スキャン日時：—</div>
         </div>
 
@@ -290,12 +265,13 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
           </div>
           <div class="field-hint">8桁の数字だけ入力（Gは自動でつきます）</div>
         </div>
-        <!-- 車体番号 -->
+
         <div class="field-group">
           <div class="field-label">車体番号 <span class="ocr-badge" id="frame-ocr-badge">手入力</span></div>
           <input type="text" class="field-input" id="inp-frame" placeholder="3205612" maxlength="20" style="font-size:18px;letter-spacing:1px">
           <div class="field-hint">フレーム番号（任意）</div>
         </div>
+
         <div class="field-group">
           <div class="field-label">
             税抜合計
@@ -304,7 +280,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
           <input type="number" class="field-input" id="inp-amt" placeholder="35640" min="0" max="100000" oninput="calcPreview()">
           <div class="field-hint">合計⇒ の右の数字（円）</div>
         </div>
-        <!-- 計算プレビュー -->
+
         <div id="calc-preview" style="display:none;background:#0d1829;border-radius:10px;padding:12px;margin-top:4px">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px">
             <span style="font-size:12px;color:#7a9cc8">消費税 (<span id="pv-rate">10</span>%)</span>
@@ -316,7 +292,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
           </div>
         </div>
       </div>
-      <!-- ボタン：フォームの下 -->
+
       <div style="display:flex;justify-content:center;align-items:center;gap:48px;padding:20px 0 8px">
         <div style="text-align:center">
           <button onclick="confirmAndSave()" style="width:72px;height:72px;border-radius:50%;border:none;background:#16a34a;color:#fff;font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;margin:0 auto;box-shadow:0 0 16px rgba(22,163,74,0.5)">🟢</button>
@@ -329,14 +305,12 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
       </div>
     </div>
 
-    <!-- 結果表示 -->
     <div class="result-section" id="result-section">
       <div class="slip-row">
         <span class="slip-label">伝票番号</span>
         <span class="slip-value" id="res-slip">—</span>
         <span class="saved-mark">✅ 保存済</span>
       </div>
-      <!-- 集計日表示 -->
       <div style="background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
         <span style="font-size:12px;color:#7a9cc8">📅 集計日</span>
         <span id="res-collection-date" style="font-size:15px;font-weight:700;color:#f0c744">—</span>
@@ -366,20 +340,17 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
   <!-- HISTORY -->
   <div class="page" id="page-history">
     <div style="position:sticky;top:0;z-index:5;background:#0d1829;padding-bottom:10px">
-      <!-- 会社フィルタータブ -->
       <div style="display:flex;gap:4px;background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:4px;margin-bottom:8px">
         <button class="co-tab active" id="co-tab-all" onclick="switchCoTab('all')">📋 全社</button>
         <button class="co-tab" id="co-tab-chiba" onclick="switchCoTab('chiba')" style="color:#f87171">🟥 千葉トヨタ</button>
         <button class="co-tab" id="co-tab-nets" onclick="switchCoTab('nets')" style="color:#60a5fa">🟦 ネッツトヨタ</button>
       </div>
-      <!-- 伝票番号検索 -->
       <div style="display:flex;align-items:center;gap:8px;background:#111f38;border:1px solid #2a4070;border-radius:12px;padding:8px 14px;margin-bottom:8px">
         <span style="font-size:16px">🔍</span>
         <input type="text" id="search-inp" placeholder="伝票番号 or 車体番号で検索" oninput="renderHistory()" inputmode="numeric"
           style="flex:1;background:none;border:none;color:#e8edf5;font-size:14px;outline:none;font-family:inherit">
         <button onclick="document.getElementById('search-inp').value='';renderHistory()" style="background:none;border:none;color:#5a7aa8;cursor:pointer;font-size:14px;padding:0">✕</button>
       </div>
-      <!-- 日付・フィルターボタン -->
       <div style="display:flex;gap:6px;align-items:center">
         <div style="display:flex;align-items:center;gap:4px;background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:5px 10px;flex:1">
           <span style="font-size:13px">📅</span>
@@ -390,7 +361,6 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
         <button id="filter-replaced-btn" onclick="toggleReplacedFilter()" style="background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:6px 10px;color:#7a9cc8;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">差替済のみ</button>
         <button id="sort-btn" onclick="toggleSort()" style="background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:6px 10px;color:#7a9cc8;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📷スキャン順</button>
       </div>
-      <!-- 日付ナビゲーター（検索・フィルター未使用時のみ表示） -->
       <div id="day-nav" style="display:flex;align-items:center;gap:6px;margin-top:8px">
         <button onclick="moveDayNav(1)" style="background:#1e3050;border:1px solid #2a4070;border-radius:8px;width:38px;height:38px;color:#e8edf5;font-size:20px;cursor:pointer;flex-shrink:0">‹</button>
         <div id="day-nav-label" style="flex:1;background:#111f38;border:1px solid #2a4070;border-radius:8px;padding:8px;text-align:center;font-size:14px;font-weight:700;color:#f0c744;cursor:pointer" onclick="resetDayNav()">—</div>
@@ -402,7 +372,6 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
   <!-- SETTINGS -->
   <div class="page" id="page-settings">
-    <!-- クラウド同期状態 -->
     <div class="settings-card">
       <div class="settings-title">☁️ クラウド同期</div>
       <div id="cloud-status" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -439,7 +408,6 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
   </div>
 </div>
 
-<!-- 直近バー -->
 <div class="recent-bar" id="recent-bar">
   <div class="recent-bar-title">直近</div>
   <div id="recent-items" style="display:flex;gap:8px"></div>
@@ -489,7 +457,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
   </div>
 </div>
 
-<!-- 差し替え確認モーダル（新しい伝票の金額を古い方に自動適用） -->
+<!-- 差し替え確認モーダル -->
 <div class="overlay" id="replace-modal">
   <div class="modal">
     <div class="modal-title">📋 差し替え確認</div>
@@ -552,14 +520,13 @@ let deleteTargetId = null;
 let currentTab = "scan";
 let currentCoTab = "all";
 let pendingOCRData = null;
-let currentBillingMonth = null; // 後方互換用（使わなくなる）
-let currentCollectionDate = null; // 集計日 (Date object) ← 新
-let sortByScanned = false; // false=集計日順, true=スキャン日順
-let realScanTime = null; // 今回のスキャン日時
-let currentDayKey = null; // 日付ナビ: "YYYY-MM-DD" or null=最新日
-let allDayKeys = []; // 全集計日リスト（降順）
+let currentCollectionDate = null;
+let sortByScanned = false;
+let realScanTime = null;
+let currentDayKey = null;
+let allDayKeys = [];
 
-// ── Firestore Storage ──────────────────────────────────────────────────────
+// ── Firestore ──────────────────────────────────────────────────────────────
 async function fsGet(key) {
   try {
     const d = await window._fsGetDoc(window._fsDoc(window._firestore, "scanner", key));
@@ -572,8 +539,6 @@ async function fsSet(key, value) {
   } catch(e) { console.error("fsSet error", e); }
 }
 
-// IndexedDB（移行用・読み取りのみ）
-let _idb = null;
 async function idbGet(key) {
   return new Promise((resolve) => {
     const req = indexedDB.open("InvoiceScanner", 1);
@@ -589,31 +554,23 @@ async function idbGet(key) {
   });
 }
 
-// localStorage fallback for tax_rate (small data)
 const lsGet = k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):null; } catch{return null;} };
 const lsSet = (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch(e){} };
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
-  // Firebase準備待ち
   if (!window._firebaseReady) {
     await new Promise(resolve => window.addEventListener("firebaseReady", resolve, {once:true}));
   }
-
-  // Firestoreから履歴を読み込む
   history = (await fsGet("inv_history")) || [];
-
-  // 初回起動時：IndexedDBにデータがあれば自動移行
   if (history.length === 0) {
     const idbData = await idbGet("inv_history");
     if (idbData && idbData.length > 0) {
       history = idbData;
       await fsSet("inv_history", history);
-      console.log("IndexedDB→Firestore 自動移行完了:", history.length, "件");
       showMigrateNotice(history.length);
     }
   }
-
   taxRate = lsGet("tax_rate") ?? 10;
   document.getElementById("tax-rate-inp").value = taxRate;
   document.getElementById("scan-rate").textContent = taxRate;
@@ -678,16 +635,13 @@ function takePhoto() {
   canvas.height = video.videoHeight;
   canvas.getContext("2d").drawImage(video, 0, 0);
 
-  // Flash effect
   const btn = document.getElementById("shutter-btn");
   btn.style.transform = "scale(0.85)";
   setTimeout(()=>btn.style.transform="", 150);
 
-  // Stop camera
   if (cameraStream) { cameraStream.getTracks().forEach(t=>t.stop()); cameraStream=null; }
   document.getElementById("camera-view").style.display = "none";
 
-  // リサイズ（最大1200px、品質80%で高速化）
   const MAX = 1200;
   let finalCanvas = canvas;
   if (canvas.width > MAX || canvas.height > MAX) {
@@ -739,10 +693,11 @@ async function runOCR(base64) {
     const slipNum   = extractSlipNumber(text);
     const total     = extractTotal(text);
     const company   = extractCompany(text);
-    const frameNum  = extractFrameNumber(text);  // 車体番号
+    const frameNum  = extractFrameNumber(text);
     const issueDate = extractIssueDate(text);
 
     console.log("=== OCR ===", {slipNum, total, company, frameNum, issueDate});
+    console.log("=== OCR raw text ===\n", text);
 
     setTimeout(() => {
       document.getElementById("loading-box").style.display = "none";
@@ -772,18 +727,18 @@ function setLoadingText(msg, pct) {
 
 // ── OCR Parsers ────────────────────────────────────────────────────────────
 function extractSlipNumber(text) {
-  // Pattern 1: G + 8 digits (normal) e.g. "G12140155"
+  // Pattern 1: G + 8 digits
   let m = text.match(/G(\d{8})/);
   if (m) return m[1];
 
-  // Pattern 2: G + digits with spaces between each digit e.g. "G 1 2 1 4 0 1 5 5"
+  // Pattern 2: G + digits with spaces
   m = text.match(/G[\s]?([\d][\s]?[\d][\s]?[\d][\s]?[\d][\s]?[\d][\s]?[\d][\s]?[\d][\s]?[\d])/);
   if (m) {
     const digits = m[1].replace(/\s/g,"");
     if (digits.length === 8) return digits;
   }
 
-  // Pattern 3: G with hyphens/spaces between groups e.g. "G12 140155"
+  // Pattern 3: G with hyphens/spaces between groups
   m = text.match(/G[\s\-]?(\d{2,4})[\s\-]?(\d{4,6})/);
   if (m) {
     const digits = (m[1]+m[2]).replace(/\D/g,"");
@@ -795,19 +750,17 @@ function extractSlipNumber(text) {
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].includes("伝票") || lines[i].includes("番号")) {
       const nearby = lines.slice(i, i+4).join(" ");
-      // Gの後にスペース区切りの8桁
       const nm = nearby.match(/G[\s]?((?:\d[\s]?){8})/);
       if (nm) {
         const digits = nm[1].replace(/\s/g,"");
         if (digits.length === 8) return digits;
       }
-      // 8桁の連続数字
       const dm = nearby.match(/\b(\d{8})\b/);
       if (dm) return dm[1];
     }
   }
 
-  // Pattern 5: 1から始まる8桁数字（G読み取り失敗時）
+  // Pattern 5: 1から始まる8桁数字
   const allMatches = text.match(/\b1\d{7}\b/g);
   if (allMatches && allMatches.length > 0) return allMatches[0];
 
@@ -820,7 +773,6 @@ function extractTotal(text) {
     const line = lines[i];
     if (line.includes("合計") || line.includes("合 計")) {
       const combined = lines.slice(i, i+3).join(" ");
-      // スペースあり・なし両方のカンマ区切り数字にマッチ
       const nums = combined.match(/\d[\d,，\s]*\d|\d+/g);
       if (nums) {
         for (const n of nums.reverse()) {
@@ -841,77 +793,85 @@ function extractCompany(text) {
   return null;
 }
 
+// ── フレーム番号OCR（改良版）────────────────────────────────────────────────
+// 注文書パターン: 「フレーム0014446店　舗　君津」
+// 「店」が番号の終端として確実に機能する
 function extractFrameNumber(text) {
-  // 書類のパターン: フレーム0014446店, フレーム0112884店, フレーム00003554店 など
-  // OCRの揺れ: フレ→フレ、ーム→一ム・ーム・ ム など
-
-  // パターン1: フレ??ム の直後の数字列（最も確実）
-  const p1 = text.match(/フレ.{0,3}ム[\s　]*(\d[\d\s]{3,10})/);
-  if (p1) {
-    const num = p1[1].replace(/\s/g, "").replace(/\D.*$/, "");
-    if (num.length >= 4) return num;
+  // パターン1: フレームXXXXX店（「店」で終端を明確化）← 最確実
+  let m = text.match(/フレ.{0,4}ム[\s　]*(\d{4,12})[\s　]*店/);
+  if (m) {
+    console.log("[フレーム] パターン1 hit:", m[1]);
+    return m[1];
   }
 
-  // パターン2: 「フレ」から始まる行を探して数字列を取る
+  // パターン2: 数字がスペース区切りで読まれた場合（例: 0 0 1 4 4 4 6 店）
+  m = text.match(/フレ.{0,4}ム[\s　]*([\d\s]{5,20})店/);
+  if (m) {
+    const num = m[1].replace(/\s/g, "");
+    if (num.length >= 4) {
+      console.log("[フレーム] パターン2 hit:", num);
+      return num;
+    }
+  }
+
+  // パターン3: 「店」なしでフレームの後の数字列（フォールバック）
+  m = text.match(/フレ.{0,4}ム[\s　]*(\d{4,12})/);
+  if (m) {
+    console.log("[フレーム] パターン3 hit:", m[1]);
+    return m[1];
+  }
+
+  // パターン4: 行単位で「フレ」を含む行を探す
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     if (/フレ/.test(lines[i])) {
-      // その行の数字（4桁以上）を取る
+      // その行で「店」の前の数字を優先
+      const lineM = lines[i].match(/(\d{4,12})[\s　]*店/);
+      if (lineM) {
+        console.log("[フレーム] パターン4a hit:", lineM[1]);
+        return lineM[1];
+      }
+      // 「店」がなければ4桁以上の数字の最長を返す
       const nums = lines[i].match(/\d{4,}/g);
-      if (nums && nums.length > 0) {
-        // 一番長い数字列を返す（フレーム番号は7-8桁が多い）
-        return nums.sort((a,b) => b.length - a.length)[0];
+      if (nums) {
+        const result = nums.sort((a,b) => b.length - a.length)[0];
+        console.log("[フレーム] パターン4b hit:", result);
+        return result;
       }
       // 次の行も確認
       if (i+1 < lines.length) {
         const nums2 = lines[i+1].match(/\d{4,}/g);
-        if (nums2 && nums2.length > 0) return nums2[0];
+        if (nums2) {
+          console.log("[フレーム] パターン4c hit:", nums2[0]);
+          return nums2[0];
+        }
       }
     }
   }
 
-  // パターン3: Frame（英語）
-  const p3 = text.match(/[Ff]rame[\s\-]*(\d{4,})/);
-  if (p3) return p3[1];
+  // パターン5: Frame（英語OCR誤読対応）
+  m = text.match(/[Ff]rame[\s\-]*(\d{4,})/);
+  if (m) {
+    console.log("[フレーム] パターン5 hit:", m[1]);
+    return m[1];
+  }
 
   return "";
 }
 
-function extractPaymentMonth(text) {
-  // 「支払予定日」の近くの月を探す（後方互換用）
-  const m = text.match(/支払[^\n]{0,10}[Rr令和]\s*\d+\s*年\s*(\d{1,2})\s*月/);
-  if (m) return parseInt(m[1]);
-  const lines = text.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes("支払")) {
-      const nearby = lines.slice(i, i+3).join(" ");
-      const nm = nearby.match(/(\d{1,2})\s*月/g);
-      if (nm && nm.length > 0) {
-        const month = parseInt(nm[nm.length-1]);
-        if (month >= 1 && month <= 12) return month;
-      }
-    }
-  }
-  return null;
-}
-
 function extractIssueDate(text) {
-  // 「注文書発行日」「発行日」の近くの日付を探す
-  // パターン: R8年1月15日 / 令和8年1月15日 / 26年1月15日
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].includes("発行日") || lines[i].includes("注文書発行")) {
       const nearby = lines.slice(i, i+3).join(" ");
-      // R8年1月15日 / 令和8年1月15日
       let m = nearby.match(/[Rr令和]\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
       if (m) {
         const rYear = parseInt(m[1]);
         const month = parseInt(m[2]);
         const day   = parseInt(m[3]);
-        const year  = rYear + 2018; // R1=2019なのでR6=2024, R8=2026
+        const year  = rYear + 2018;
         return new Date(year, month-1, day);
       }
-      // 26年1月15日 (西暦下2桁)
       m = nearby.match(/(\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
       if (m) {
         const shortYear = parseInt(m[1]);
@@ -922,27 +882,7 @@ function extractIssueDate(text) {
       }
     }
   }
-  // 見つからなければ今日
   return null;
-}
-
-function calcBillingMonth(paymentMonth) {
-  if (!paymentMonth) return null;
-  const now = new Date();
-  let year = now.getFullYear();
-  let month = paymentMonth - 1;
-  if (month === 0) { month = 12; year -= 1; }
-  return new Date(year, month - 1, 1); // 月の初日（表示用）
-}
-
-function billingMonthStr(d) {
-  if (!d) return null;
-  return `${d.getFullYear()}年${d.getMonth()+1}月分`;
-}
-
-function billingMonthKey(d) {
-  if (!d) return null;
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
 }
 
 // ── Input Form ─────────────────────────────────────────────────────────────
@@ -954,13 +894,10 @@ function showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNu
 
   slipInp.value = slipNum || "";
   amtInp.value  = total || "";
-  // 必ずクリアしてからセット（前回の値が残らないように）
-  if (frameInp) frameInp.value = "";
-  if (frameInp && frameNum) frameInp.value = frameNum;
+  if (frameInp) frameInp.value = frameNum || "";
 
   selectCompanyForm(company || null, true);
 
-  // OCRバッジ（車体番号）
   const frameBadge = document.getElementById("frame-ocr-badge");
   if (frameBadge) {
     frameBadge.textContent = frameNum ? "OCR ✓" : "手入力";
@@ -968,14 +905,10 @@ function showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNu
     frameBadge.style.color = frameNum ? "#4ade80" : "#5a7aa8";
   }
 
-  selectCompanyForm(company || null, true);
-
-  // 集計日セット（発行日OCR > スキャン日）
   const now = realScanTime || new Date();
   currentCollectionDate = issueDate || now;
   initDrum(currentCollectionDate, issueDateOCR);
 
-  // スキャン日時表示
   const scanDisp = document.getElementById("scan-datetime-disp");
   if (scanDisp) {
     const ds = now.toLocaleDateString("ja-JP",{month:"long",day:"numeric"});
@@ -983,7 +916,6 @@ function showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNu
     scanDisp.textContent = `📷 スキャン日時：${ds} ${ts}`;
   }
 
-  // OCRバッジ
   const slipBadge = document.getElementById("slip-ocr-badge");
   const amtBadge  = document.getElementById("amt-ocr-badge");
   slipBadge.textContent = slipNum ? "OCR ✓" : "手入力";
@@ -1010,7 +942,6 @@ function showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNu
 }
 
 // ── Drum Roll ───────────────────────────────────────────────────────────────
-// 表示する月リスト（今月基準で±4ヶ月 = 9ヶ月）
 function buildMonthList() {
   const now = new Date();
   const list = [];
@@ -1029,11 +960,9 @@ function initDrum(date, isOCR) {
   const targetMonth = date.getMonth()+1;
   const targetDay = date.getDate();
 
-  // 月インデックス
   let mIdx = monthList.findIndex(m => m.year===targetYear && m.month===targetMonth);
   if (mIdx < 0) mIdx = Math.floor(monthList.length/2);
 
-  // 日数
   const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
 
   renderDrumMonth(monthList, mIdx);
@@ -1140,7 +1069,6 @@ function updateCdBadge(isOCR) {
   badge.style.color = isOCR ? "#4ade80" : "#5a7aa8";
 }
 
-// 後方互換用（他の場所から呼ばれる可能性がある空関数）
 function adjustBillingMonth() {}
 function updateBillingMonthDisp() {}
 
@@ -1182,7 +1110,6 @@ function getSelectedCompany() {
   return null;
 }
 
-// 会社モーダルから選択
 function selectCompanyModal(company) {
   document.getElementById("company-modal").classList.remove("show");
   if (pendingOCRData) {
@@ -1206,7 +1133,6 @@ function calcPreview() {
   }
 }
 
-// 重複スキャン用の一時エントリ
 let pendingEntry = null;
 
 function confirmAndSave() {
@@ -1225,7 +1151,6 @@ function confirmAndSave() {
   if (!slipDigits || slipDigits.length !== 8) { slipInp.classList.add("error"); slipInp.focus(); ok=false; }
   if (!amtVal || amtVal <= 0) { amtInp.classList.add("error"); if(ok) amtInp.focus(); ok=false; }
   if (!company) {
-    // 会社未選択 → 警告
     document.getElementById("co-btn-chiba").style.outline = "2px solid #e05a2b";
     document.getElementById("co-btn-nets").style.outline  = "2px solid #e05a2b";
     setTimeout(()=>{
@@ -1239,20 +1164,18 @@ function confirmAndSave() {
   const tax  = Math.round(amtVal * taxRate / 100);
   const incl = amtVal + tax;
 
-  // 集計日（ドラムで選んだ日）
   const cd = currentCollectionDate || new Date();
   const cdKey = `${cd.getFullYear()}-${String(cd.getMonth()+1).padStart(2,"0")}-${String(cd.getDate()).padStart(2,"0")}`;
   const bmKey = `${cd.getFullYear()}-${String(cd.getMonth()+1).padStart(2,"0")}`;
 
-  // scanned_at は後方互換用に集計月末に設定
   const lastDay = new Date(cd.getFullYear(), cd.getMonth()+1, 0);
   lastDay.setHours(23,59,59,0);
 
   const entry = {
     id: Date.now(),
-    scanned_at: lastDay.toISOString(),          // 後方互換（集計月末）
-    real_scanned_at: (realScanTime || new Date()).toISOString(), // 実際のスキャン日時
-    collection_date: cdKey,                      // 集計日 "YYYY-MM-DD"
+    scanned_at: lastDay.toISOString(),
+    real_scanned_at: (realScanTime || new Date()).toISOString(),
+    collection_date: cdKey,
     slip_number: slipVal,
     total_excl_tax: amtVal,
     tax, incl,
@@ -1262,7 +1185,6 @@ function confirmAndSave() {
     frame_number: frameVal || "",
   };
 
-  // 重複チェック
   const existing = history.find(h => h.slip_number === slipVal);
   if (existing) {
     pendingEntry = entry;
@@ -1292,7 +1214,6 @@ function saveEntry(entry) {
   document.getElementById("res-incl").textContent  = fmt(entry.incl);
   document.getElementById("res-rate-txt").textContent = `×${taxRate}%`;
 
-  // 集計日表示
   const cdKey = entry.collection_date || "";
   if (cdKey) {
     const [cy,cm,cd2] = cdKey.split("-").map(Number);
@@ -1309,7 +1230,6 @@ function saveEntry(entry) {
 
 function undoLastEntry() {
   if (history.length === 0) return;
-  // 最後に保存したエントリを削除
   const last = [...history].sort((a,b) =>
     new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at)
   )[0];
@@ -1327,7 +1247,6 @@ function closeDupModal() {
 
 function confirmDupReplace() {
   if (!pendingEntry) return;
-  // 古い方を新しい金額で上書き
   const old = history.find(h => h.slip_number === pendingEntry.slip_number);
   if (old) {
     old.replaced_from = old.replaced_from ?? old.total_excl_tax;
@@ -1336,11 +1255,9 @@ function confirmDupReplace() {
     old.incl = pendingEntry.incl;
   }
   document.getElementById("dup-modal").classList.remove("show");
-  // 新しいスキャン分は保存しない（差し替えだから古い方を更新するだけ）
   pendingEntry = null;
   fsSet("inv_history", history);
   updateHeader(); updateRecentBar(); renderHistory();
-  // スキャン結果画面を閉じてカメラへ
   document.getElementById("input-form").style.display = "none";
   startCamera();
 }
@@ -1404,7 +1321,6 @@ function renderHistory() {
   const dateVal   = document.getElementById("date-filter")?.value || "";
   const isFiltering = !!(searchVal || dateVal || filterReplaced || sortByScanned);
 
-  // 日付ナビの表示制御
   const dayNav = document.getElementById("day-nav");
   if (dayNav) dayNav.style.display = isFiltering ? "none" : "flex";
 
@@ -1424,17 +1340,14 @@ function renderHistory() {
     return;
   }
 
-  // ヘルパー：集計日キー "YYYY-MM-DD"
   const getCollectionDateKey = item => {
     if (item.collection_date) return item.collection_date;
-    // 旧データ：real_scanned_at の日付
     const src = item.real_scanned_at || item.scanned_at;
     const d = new Date(src);
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   };
   const getBillingKey = item => item.billing_month || getCollectionDateKey(item).slice(0,7);
 
-  // ── ソート: スキャン日順 ──
   if (sortByScanned) {
     const sorted = [...filtered].sort((a,b)=> {
       const ta = new Date(a.real_scanned_at||a.scanned_at);
@@ -1482,29 +1395,25 @@ function renderHistory() {
     return;
   }
 
-  // ── 通常：集計日（予定表）ベース表示 ──
   const slipMap = {};
   history.forEach(item => {
     if(!slipMap[item.slip_number]) slipMap[item.slip_number] = [];
     slipMap[item.slip_number].push(item);
   });
 
-  // 全集計日キーを降順で収集（日付ナビ用）
   const dayKeySet = new Set();
   filtered.forEach(item => dayKeySet.add(getCollectionDateKey(item)));
   allDayKeys = Array.from(dayKeySet).sort((a,b) => b.localeCompare(a));
 
-  // 現在の日付ナビキーを補正
   if (allDayKeys.length > 0) {
     if (!currentDayKey || !allDayKeys.includes(currentDayKey)) {
-      currentDayKey = allDayKeys[0]; // デフォルト：最新日
+      currentDayKey = allDayKeys[0];
     }
   } else {
     currentDayKey = null;
   }
   updateDayNavLabel();
 
-  // 日付ナビで絞り込み（フィルターなし時のみ）
   const dayFiltered = isFiltering ? filtered : filtered.filter(item => getCollectionDateKey(item) === currentDayKey);
   const monthGrouped = {};
   dayFiltered.forEach(item => {
@@ -1518,7 +1427,6 @@ function renderHistory() {
   const coBorderStyle = co => co==="chiba" ? "border-left:4px solid #ef4444;" : co==="nets" ? "border-left:4px solid #3b82f6;" : "";
 
   el.innerHTML = sortedMonthKeys.map(mk => {
-    // 集計月内のアイテムを集計日昇順→スキャン日昇順でソート
     const mItems = monthGrouped[mk].sort((a,b) => {
       const da = getCollectionDateKey(a);
       const db = getCollectionDateKey(b);
@@ -1533,7 +1441,6 @@ function renderHistory() {
     const monthLabel = `${y}年${parseInt(m)}月分`;
     const mId = mk.replace("-","");
 
-    // 集計日でグループ化
     const dayGrouped = {};
     mItems.forEach(item => {
       const dk = getCollectionDateKey(item);
@@ -1541,7 +1448,6 @@ function renderHistory() {
       dayGrouped[dk].push(item);
     });
 
-    // グローバル通し番号（月内でスキャン古い順）
     let globalIdx = 0;
 
     const daysHtml = Object.keys(dayGrouped).sort((a,b) => b.localeCompare(a)).map(dk => {
@@ -1570,7 +1476,6 @@ function renderHistory() {
           : coBorderStyle(co);
         const scanDt = new Date(item.real_scanned_at||item.scanned_at);
         const scanStr = scanDt.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
-        // 集計日とスキャン日が違う場合はスキャン日も表示
         const scanDateKey = `${scanDt.getFullYear()}-${String(scanDt.getMonth()+1).padStart(2,"0")}-${String(scanDt.getDate()).padStart(2,"0")}`;
         const scanDateDisp = scanDateKey !== dk
           ? `📷 ${parseInt(scanDt.getMonth()+1)}/${parseInt(scanDt.getDate())} ${scanStr}`
@@ -1664,7 +1569,6 @@ function updateDayNavLabel() {
   label.textContent = `${parseInt(m)}月${parseInt(d)}日(${dow})　${idx+1}/${allDayKeys.length}`;
 }
 
-// delta: +1=古い日(右フリック), -1=新しい日(左フリック)
 function moveDayNav(delta) {
   if (allDayKeys.length === 0) return;
   const idx = allDayKeys.indexOf(currentDayKey);
@@ -1674,7 +1578,6 @@ function moveDayNav(delta) {
 }
 
 function resetDayNav() {
-  // ラベルタップで今日 or 最新日に戻る
   if (allDayKeys.length > 0) {
     currentDayKey = allDayKeys[0];
     renderHistory();
@@ -1692,12 +1595,13 @@ function initSwipe() {
     const searchVal = document.getElementById("search-inp")?.value || "";
     const dateVal = document.getElementById("date-filter")?.value || "";
     if (searchVal || dateVal || filterReplaced || sortByScanned) return;
-    if (diff < 0) moveDayNav(-1); // 左フリック → 新しい日
-    else moveDayNav(1);           // 右フリック → 古い日
+    if (diff < 0) moveDayNav(-1);
+    else moveDayNav(1);
   }, {passive:true});
 }
 
 document.addEventListener("DOMContentLoaded", initSwipe);
+
 // ── Company tab ────────────────────────────────────────────────────────────
 function switchCoTab(co) {
   currentCoTab = co;
@@ -1705,7 +1609,6 @@ function switchCoTab(co) {
     const btn = document.getElementById("co-tab-"+c);
     if (btn) btn.classList.toggle("active", c === co);
   });
-  // ヘッダーの累計も更新
   updateHeader();
   renderHistory();
 }
@@ -1773,7 +1676,8 @@ function confirmReplace() {
 
 // ── Edit ───────────────────────────────────────────────────────────────────
 let editTargetId = null;
-let editDateTarget = new Date(); // 編集モーダル用の集計日
+let editDateTarget = new Date();
+
 function openEdit(id) {
   editTargetId = id;
   const item = history.find(h=>h.id===id);
@@ -1782,7 +1686,6 @@ function openEdit(id) {
   document.getElementById("edit-amt").value = item.total_excl_tax;
   document.getElementById("edit-frame").value = item.frame_number || "";
 
-  // 集計日ドラム初期化
   const cdKey = item.collection_date || (() => {
     const d = new Date(item.real_scanned_at || item.scanned_at);
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -1796,14 +1699,12 @@ function openEdit(id) {
 
 function editLastEntry() {
   if (history.length === 0) return;
-  // 最後に保存したエントリ（real_scanned_at が最新）
   const last = [...history].sort((a,b) =>
     new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at)
   )[0];
   openEdit(last.id);
 }
 
-// ── Edit Drum ───────────────────────────────────────────────────────────────
 function initEditDrum(date) {
   const monthList = buildMonthList();
   const targetYear = date.getFullYear();
@@ -1815,7 +1716,6 @@ function initEditDrum(date) {
 
   const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
 
-  // 月ドラム
   const mEl = document.getElementById("edit-drum-month");
   if (mEl) {
     mEl.innerHTML = monthList.map((m,i) => {
@@ -1824,7 +1724,6 @@ function initEditDrum(date) {
     }).join("");
     mEl.style.transform = `translateY(${-mIdx * ITEM_H}px)`;
   }
-  // 日ドラム
   const dEl = document.getElementById("edit-drum-day");
   if (dEl) {
     dEl.innerHTML = Array.from({length:daysInMonth},(_,i)=>
@@ -1839,7 +1738,6 @@ function initEditDrum(date) {
     const curDay = editDateTarget.getDate();
     const day = Math.min(curDay, maxDay);
     editDateTarget = new Date(m.year, m.month-1, day);
-    // 日ドラム再描画
     const dEl2 = document.getElementById("edit-drum-day");
     if (dEl2) {
       dEl2.innerHTML = Array.from({length:maxDay},(_,i)=>
@@ -1852,10 +1750,12 @@ function initEditDrum(date) {
     editDateTarget = new Date(editDateTarget.getFullYear(), editDateTarget.getMonth(), newIdx+1);
   });
 }
+
 function closeEditModal() {
   document.getElementById("edit-modal").classList.remove("show");
   editTargetId = null;
 }
+
 function confirmEdit() {
   const item = history.find(h=>h.id===editTargetId);
   if(!item) return;
@@ -1874,11 +1774,9 @@ function confirmEdit() {
   item.incl = amt + item.tax;
   item.frame_number = frameVal;
 
-  // 集計日更新
   const cd = editDateTarget;
   item.collection_date = `${cd.getFullYear()}-${String(cd.getMonth()+1).padStart(2,"0")}-${String(cd.getDate()).padStart(2,"0")}`;
   item.billing_month = `${cd.getFullYear()}-${String(cd.getMonth()+1).padStart(2,"0")}`;
-  // scanned_at も更新（後方互換）
   const lastDay = new Date(cd.getFullYear(), cd.getMonth()+1, 0);
   lastDay.setHours(23,59,59,0);
   item.scanned_at = lastDay.toISOString();
