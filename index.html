@@ -841,45 +841,55 @@ function extractCompany(text) {
 
 // ── フレーム番号OCR（改良版）────────────────────────────────────────────────
 // ★デバッグで判明した実際のOCRパターン★
-// フレーム行: ">L-40047780店"
-// 次行:       "7F"
-// 次々行:     "舗 市原平成通"
-// ※「フレーム」は別の文字に誤読され、「店」と「舗」は別行になる
+// 「フレーム」は毎回違う文字に誤読される: "74", ">L-", "U-" など
+// でも「数字+店+舗」の構造は生き残る
+// 例: "U-0047780店 舗 市原平成通" / ">L-40047780店\n7F\n舗 市原平成通"
 function extractFrameNumber(text) {
   const lines = text.split("\n");
 
-  // パターン1: 同一行に「数字+店+舗」（理想ケース）
+  // パターン1: 同一行に「店+舗」があり、その行の中に4桁以上の数字がある
+  // 例: "U-0047780店 舗 市原平成通" → 数字部分 "0047780" を取る
   for (const line of lines) {
-    const m = line.match(/(\d{4,12})[\s　]*店[\s　]*舗/);
-    if (m) {
-      console.log("[フレーム] P1（同行店+舗）hit:", m[1]);
-      return m[1];
-    }
-  }
-
-  // パターン2: 「数字+店」で終わる行を探し、前後3行以内に「舗」が見つかればOK
-  // 例: ">L-40047780店" → 次行"7F" → 次々行"舗 市原平成通"
-  for (let i = 0; i < lines.length; i++) {
-    const mA = lines[i].match(/(\d{4,12})[\s　]*店/);
-    if (mA) {
-      // 前後3行以内に「舗」があるか確認
-      const window = lines.slice(Math.max(0, i-1), i+4).join("\n");
-      if (/舗/.test(window)) {
-        console.log("[フレーム] P2（数字+店、近くに舗）hit:", mA[1], "行:", lines[i]);
-        return mA[1];
+    if (/店[\s　]*舗/.test(line)) {
+      // 「店」の前にある最長の数字列を取る
+      const before = line.split("店")[0];
+      const nums = before.match(/\d{4,}/g);
+      if (nums) {
+        const result = nums[nums.length - 1]; // 直前の数字列
+        console.log("[フレーム] P1（同行店+舗）hit:", result, "行:", line);
+        return result;
       }
     }
   }
 
-  // パターン3: 「舗」を含む行の直前数行から数字列を探す（逆引き）
+  // パターン2: 「数字+店」の行から前後3行以内に「舗」がある
+  // 例: ">L-40047780店\n7F\n舗 市原平成通"
+  for (let i = 0; i < lines.length; i++) {
+    if (/店/.test(lines[i])) {
+      const before = lines[i].split("店")[0];
+      const nums = before.match(/\d{4,}/g);
+      if (nums) {
+        const window = lines.slice(Math.max(0, i-1), i+4).join("\n");
+        if (/舗/.test(window)) {
+          const result = nums[nums.length - 1];
+          console.log("[フレーム] P2（数字+店、近くに舗）hit:", result, "行:", lines[i]);
+          return result;
+        }
+      }
+    }
+  }
+
+  // パターン3: 「舗」行の前3行を逆引きして数字+店を探す
   for (let i = 0; i < lines.length; i++) {
     if (/舗[\s　]/.test(lines[i])) {
-      // 前3行を遡って数字+店を探す
       for (let j = Math.max(0, i-3); j < i; j++) {
-        const m = lines[j].match(/(\d{4,12})[\s　]*店/);
-        if (m) {
-          console.log("[フレーム] P3（舗から逆引き）hit:", m[1], "行:", lines[j]);
-          return m[1];
+        if (/店/.test(lines[j])) {
+          const before = lines[j].split("店")[0];
+          const nums = before.match(/\d{4,}/g);
+          if (nums) {
+            console.log("[フレーム] P3（舗から逆引き）hit:", nums[nums.length-1]);
+            return nums[nums.length - 1];
+          }
         }
       }
     }
