@@ -842,9 +842,32 @@ function extractCompany(text) {
 }
 
 function extractFrameNumber(text) {
-  // 「フレーム」の後の数字のみ抽出（「店」など非数字は除去）
-  const m = text.match(/フレ[ーレ]ム[\s　]*([0-9A-Za-z]+)/);
-  if (m) return m[1].replace(/[^\d]/g, ""); // 数字のみ
+  // OCRの揺れに対応したパターン群
+  // 「フレーム」「フレ一ム」「フレ ム」「Frame」など
+  const patterns = [
+    /フレ[ーレ一\s]?ム[\s　]*([0-9A-Za-z][\s0-9A-Za-z]{3,15})/,
+    /フレ[ーレ一\s]?[\s　]*([0-9]{4,})/,
+    /[Ff]rame[\s\-]*([0-9A-Za-z]{4,})/,
+  ];
+  for (const pat of patterns) {
+    const m = text.match(pat);
+    if (m) {
+      // スペース除去・非英数除去・末尾の「店」など文字を除く
+      const raw = m[1].replace(/\s/g, "");
+      // 数字のみ取り出す（アルファベット混じりの車台番号も考慮しつつ末尾文字除去）
+      const digits = raw.replace(/[^\dA-Za-z]/g, "").replace(/[A-Za-z]+$/, "");
+      if (digits.length >= 4) return digits;
+    }
+  }
+  // 「フレーム」行を行単位で探してその行の数字列を取る
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (/フレ/.test(lines[i])) {
+      const nearby = lines.slice(i, i+2).join(" ");
+      const nums = nearby.match(/\d{4,}/g);
+      if (nums) return nums[0];
+    }
+  }
   return "";
 }
 
