@@ -842,32 +842,38 @@ function extractCompany(text) {
 }
 
 function extractFrameNumber(text) {
-  // OCRの揺れに対応したパターン群
-  // 「フレーム」「フレ一ム」「フレ ム」「Frame」など
-  const patterns = [
-    /フレ[ーレ一\s]?ム[\s　]*([0-9A-Za-z][\s0-9A-Za-z]{3,15})/,
-    /フレ[ーレ一\s]?[\s　]*([0-9]{4,})/,
-    /[Ff]rame[\s\-]*([0-9A-Za-z]{4,})/,
-  ];
-  for (const pat of patterns) {
-    const m = text.match(pat);
-    if (m) {
-      // スペース除去・非英数除去・末尾の「店」など文字を除く
-      const raw = m[1].replace(/\s/g, "");
-      // 数字のみ取り出す（アルファベット混じりの車台番号も考慮しつつ末尾文字除去）
-      const digits = raw.replace(/[^\dA-Za-z]/g, "").replace(/[A-Za-z]+$/, "");
-      if (digits.length >= 4) return digits;
-    }
+  // 書類のパターン: フレーム0014446店, フレーム0112884店, フレーム00003554店 など
+  // OCRの揺れ: フレ→フレ、ーム→一ム・ーム・ ム など
+
+  // パターン1: フレ??ム の直後の数字列（最も確実）
+  const p1 = text.match(/フレ.{0,3}ム[\s　]*(\d[\d\s]{3,10})/);
+  if (p1) {
+    const num = p1[1].replace(/\s/g, "").replace(/\D.*$/, "");
+    if (num.length >= 4) return num;
   }
-  // 「フレーム」行を行単位で探してその行の数字列を取る
+
+  // パターン2: 「フレ」から始まる行を探して数字列を取る
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     if (/フレ/.test(lines[i])) {
-      const nearby = lines.slice(i, i+2).join(" ");
-      const nums = nearby.match(/\d{4,}/g);
-      if (nums) return nums[0];
+      // その行の数字（4桁以上）を取る
+      const nums = lines[i].match(/\d{4,}/g);
+      if (nums && nums.length > 0) {
+        // 一番長い数字列を返す（フレーム番号は7-8桁が多い）
+        return nums.sort((a,b) => b.length - a.length)[0];
+      }
+      // 次の行も確認
+      if (i+1 < lines.length) {
+        const nums2 = lines[i+1].match(/\d{4,}/g);
+        if (nums2 && nums2.length > 0) return nums2[0];
+      }
     }
   }
+
+  // パターン3: Frame（英語）
+  const p3 = text.match(/[Ff]rame[\s\-]*(\d{4,})/);
+  if (p3) return p3[1];
+
   return "";
 }
 
@@ -948,7 +954,9 @@ function showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNu
 
   slipInp.value = slipNum || "";
   amtInp.value  = total || "";
-  if (frameInp) frameInp.value = frameNum || "";
+  // 必ずクリアしてからセット（前回の値が残らないように）
+  if (frameInp) frameInp.value = "";
+  if (frameInp && frameNum) frameInp.value = frameNum;
 
   selectCompanyForm(company || null, true);
 
