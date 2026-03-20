@@ -840,41 +840,61 @@ function extractCompany(text) {
 }
 
 // ── フレーム番号OCR（改良版）────────────────────────────────────────────────
-// ★重要発見★ OCRは「フレーム」を全く違う文字に誤読する！
-// 例: "フレーム0112884" → "740112884" のように化ける
-// 対策: 「数字 + 店 + 舗」という唯一無二のパターンで特定する
+// ★デバッグで判明した実際のOCRパターン★
+// フレーム行: ">L-40047780店"
+// 次行:       "7F"
+// 次々行:     "舗 市原平成通"
+// ※「フレーム」は別の文字に誤読され、「店」と「舗」は別行になる
 function extractFrameNumber(text) {
   const lines = text.split("\n");
 
-  // パターン1: XXXXX店 舗（同一行に「店」+「舗」がある場合）← 最確実
-  // 例: "0047780店 舗 市原平成通" / "740112884店 舗 南流山"
+  // パターン1: 同一行に「数字+店+舗」（理想ケース）
   for (const line of lines) {
     const m = line.match(/(\d{4,12})[\s　]*店[\s　]*舗/);
     if (m) {
-      console.log("[フレーム] P1（店+舗）hit:", m[1], "行:", line);
+      console.log("[フレーム] P1（同行店+舗）hit:", m[1]);
       return m[1];
     }
   }
 
-  // パターン2: 「店」で終わる行 → 次行が「舗」で始まる（改行で分かれた場合）
-  for (let i = 0; i < lines.length - 1; i++) {
-    const mA = lines[i].match(/(\d{4,12})[\s　]*店\s*$/);
-    if (mA && /^[\s　]*舗/.test(lines[i+1])) {
-      console.log("[フレーム] P2（店\\n舗）hit:", mA[1]);
-      return mA[1];
+  // パターン2: 「数字+店」で終わる行を探し、前後3行以内に「舗」が見つかればOK
+  // 例: ">L-40047780店" → 次行"7F" → 次々行"舗 市原平成通"
+  for (let i = 0; i < lines.length; i++) {
+    const mA = lines[i].match(/(\d{4,12})[\s　]*店/);
+    if (mA) {
+      // 前後3行以内に「舗」があるか確認
+      const window = lines.slice(Math.max(0, i-1), i+4).join("\n");
+      if (/舗/.test(window)) {
+        console.log("[フレーム] P2（数字+店、近くに舗）hit:", mA[1], "行:", lines[i]);
+        return mA[1];
+      }
     }
   }
 
-  // パターン3: フレームが正しく読めた場合（念のためバックアップ）
+  // パターン3: 「舗」を含む行の直前数行から数字列を探す（逆引き）
+  for (let i = 0; i < lines.length; i++) {
+    if (/舗[\s　]/.test(lines[i])) {
+      // 前3行を遡って数字+店を探す
+      for (let j = Math.max(0, i-3); j < i; j++) {
+        const m = lines[j].match(/(\d{4,12})[\s　]*店/);
+        if (m) {
+          console.log("[フレーム] P3（舗から逆引き）hit:", m[1], "行:", lines[j]);
+          return m[1];
+        }
+      }
+    }
+  }
+
+  // パターン4: フレームが正しく読めた場合（バックアップ）
   let m = text.match(/フレ.{0,4}ム[\s　]*(\d{4,12})[\s　]*店/);
-  if (m) { console.log("[フレーム] P3（フレーム+店）hit:", m[1]); return m[1]; }
+  if (m) { console.log("[フレーム] P4（フレーム+店）hit:", m[1]); return m[1]; }
 
   m = text.match(/フレ.{0,4}ム[\s　]*(\d{4,12})/);
-  if (m) { console.log("[フレーム] P4（フレームのみ）hit:", m[1]); return m[1]; }
+  if (m) { console.log("[フレーム] P5（フレームのみ）hit:", m[1]); return m[1]; }
 
-  // パターン5: Frame（英語誤読）
+  // パターン6: Frame（英語誤読）
   m = text.match(/[Ff]rame[\s\-]*(\d{4,})/);
-  if (m) { console.log("[フレーム] P5（Frame英語）hit:", m[1]); return m[1]; }
+  if (m) { console.log("[フレーム] P6（Frame英語）hit:", m[1]); return m[1]; }
 
   console.log("[フレーム] 全パターン失敗");
   return "";
