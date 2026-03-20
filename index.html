@@ -839,78 +839,22 @@ function extractCompany(text) {
   return null;
 }
 
-// ── フレーム番号OCR（改良版）────────────────────────────────────────────────
-// ★デバッグで判明した実際のOCRパターン★
-// 「フレーム」→ "7 -4" / ">L-" / "U-" など毎回違う文字に誤読
-// 「舗」→ 「請」に誤読されることもある
-// フレーム番号は7桁（たまに8桁）
-// 構造: [ゴミ文字][7桁数字]店 [舗 or 請] [店舗名]
+// ── フレーム番号OCR ────────────────────────────────────────────────────────
+// 「店」は必ず正しく認識される → 店の直前7桁を取るだけ！
 function extractFrameNumber(text) {
-  const lines = text.split("\n");
-
-  // 「店」の後に来る文字（舗 or 請 or 鋪 など）を判定するヘルパー
-  const isMisenChar = (s) => /[舗請鋪]/.test(s);
-
-  // パターン1: 同一行に「店」+「舗or請」がある
-  // 例: "U-0047780店 舗 市原平成通"
-  for (const line of lines) {
-    if (/店[\s　]*[舗請鋪]/.test(line)) {
-      const before = line.split("店")[0];
-      const nums = before.match(/\d+/g);
-      if (nums) {
-        // 全数字を結合して末尾7桁（or8桁）を取る
-        const allDigits = nums.join("");
-        const result = allDigits.length >= 7 ? allDigits.slice(-7) : allDigits;
-        console.log("[フレーム] P1（同行店+舗/請）hit:", result, "行:", line);
-        return result;
-      }
-    }
+  // 「店」の直前の7桁を取る（一番シンプルで確実）
+  const m = text.match(/(\d{7})店/);
+  if (m) {
+    console.log("[フレーム] hit:", m[1]);
+    return m[1];
   }
-
-  // パターン2: 「数字+店」行 → 前後3行以内に「舗 or 請」がある
-  // 例: "7 -40112884店\n請 南流山"
-  for (let i = 0; i < lines.length; i++) {
-    if (/店/.test(lines[i])) {
-      const before = lines[i].split("店")[0];
-      const nums = before.match(/\d+/g);
-      if (nums) {
-        const window = lines.slice(Math.max(0, i-1), i+4).join("\n");
-        if (/[舗請鋪]/.test(window)) {
-          const allDigits = nums.join("");
-          const result = allDigits.length >= 7 ? allDigits.slice(-7) : allDigits;
-          console.log("[フレーム] P2（数字+店、近くに舗/請）hit:", result, "行:", lines[i]);
-          return result;
-        }
-      }
-    }
+  // 念のため8桁も試す
+  const m8 = text.match(/(\d{8})店/);
+  if (m8) {
+    console.log("[フレーム] 8桁 hit:", m8[1]);
+    return m8[1];
   }
-
-  // パターン3: 「舗 or 請」行の前3行を逆引き
-  for (let i = 0; i < lines.length; i++) {
-    if (/^[\s　]*[舗請鋪][\s　]/.test(lines[i])) {
-      for (let j = Math.max(0, i-3); j < i; j++) {
-        if (/店/.test(lines[j])) {
-          const before = lines[j].split("店")[0];
-          const nums = before.match(/\d+/g);
-          if (nums) {
-            const allDigits = nums.join("");
-            const result = allDigits.length >= 7 ? allDigits.slice(-7) : allDigits;
-            console.log("[フレーム] P3（舗/請から逆引き）hit:", result);
-            return result;
-          }
-        }
-      }
-    }
-  }
-
-  // パターン4: フレームが正しく読めた場合（バックアップ）
-  let m = text.match(/フレ.{0,4}ム[\s　]*(\d{4,12})[\s　]*店/);
-  if (m) { console.log("[フレーム] P4 hit:", m[1]); return m[1]; }
-
-  m = text.match(/フレ.{0,4}ム[\s　]*(\d{4,12})/);
-  if (m) { console.log("[フレーム] P5 hit:", m[1]); return m[1]; }
-
-  console.log("[フレーム] 全パターン失敗");
+  console.log("[フレーム] 失敗");
   return "";
 }
 
