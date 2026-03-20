@@ -222,6 +222,29 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
       <img id="preview" class="preview-img" src="" alt="" style="display:block;margin-bottom:0;max-height:220px">
     </div>
 
+    <!-- OCRデバッグ表示 -->
+    <div id="ocr-debug" style="display:none;margin-top:8px;border-radius:10px;overflow:hidden;font-size:11px">
+      <div style="background:#1a3050;padding:6px 10px;font-weight:700;color:#f0c744;display:flex;justify-content:space-between;align-items:center">
+        🔍 OCRデバッグ情報
+        <button onclick="document.getElementById('ocr-debug').style.display='none'" style="background:none;border:none;color:#5a7aa8;cursor:pointer;font-size:14px">✕</button>
+      </div>
+      <!-- フレーム行 -->
+      <div style="background:#0d1829;padding:8px 10px;border-bottom:1px solid #1e3050">
+        <div style="color:#f0c744;font-weight:700;margin-bottom:4px">「フレ」を含む行：</div>
+        <div id="debug-frame-lines" style="color:#e8edf5;white-space:pre-wrap;word-break:break-all;background:#111f38;border-radius:6px;padding:6px;margin-top:4px;min-height:24px"></div>
+      </div>
+      <!-- 抽出結果 -->
+      <div style="background:#0d1829;padding:8px 10px;border-bottom:1px solid #1e3050">
+        <div style="color:#f0c744;font-weight:700;margin-bottom:4px">抽出結果：</div>
+        <div id="debug-extract-result" style="color:#4ade80;font-size:13px;font-weight:700;padding:4px 0"></div>
+      </div>
+      <!-- 全OCRテキスト -->
+      <div style="background:#0d1829;padding:8px 10px">
+        <div style="color:#f0c744;font-weight:700;margin-bottom:4px">OCR全文（先頭500文字）：</div>
+        <div id="debug-full-text" style="color:#7a9cc8;white-space:pre-wrap;word-break:break-all;background:#111f38;border-radius:6px;padding:6px;max-height:200px;overflow-y:auto;font-size:10px"></div>
+      </div>
+    </div>
+
     <div class="loading-box" id="loading-box">
       <div class="spinner"></div>
       <div class="loading-text" id="loading-text">読み取り中…</div>
@@ -698,6 +721,27 @@ async function runOCR(base64) {
 
     console.log("=== OCR ===", {slipNum, total, company, frameNum, issueDate});
     console.log("=== OCR raw text ===\n", text);
+
+    // ── iPhoneデバッグ表示 ──────────────────────────────
+    const debugEl = document.getElementById("ocr-debug");
+    if (debugEl) {
+      // フレームを含む行を抽出
+      const frameLines = text.split("\n").filter(l => /フレ/.test(l));
+      document.getElementById("debug-frame-lines").textContent =
+        frameLines.length > 0
+          ? frameLines.map((l,i) => `[${i+1}] ${JSON.stringify(l)}`).join("\n")
+          : "（「フレ」を含む行が見つかりませんでした）";
+
+      // 抽出結果
+      document.getElementById("debug-extract-result").textContent =
+        frameNum ? `✅ 抽出成功: "${frameNum}"` : "❌ 抽出失敗（空文字）";
+
+      // 全OCRテキスト（先頭500文字）
+      document.getElementById("debug-full-text").textContent = text.slice(0, 500);
+
+      debugEl.style.display = "block";
+    }
+    // ────────────────────────────────────────────────────
 
     setTimeout(() => {
       document.getElementById("loading-box").style.display = "none";
