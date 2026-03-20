@@ -353,6 +353,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
         </div>
       </div>
       <button class="btn-next" onclick="goNext()">📷 次を撮影</button>
+      <button onclick="editLastEntry()" style="width:100%;margin-top:8px;padding:12px;background:#1e3050;border:1px solid #2a4070;border-radius:12px;color:#f0c744;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">✏️ 直前修正</button>
     </div>
   </div>
 
@@ -518,6 +519,17 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
     <div style="margin-bottom:16px">
       <div style="font-size:11px;color:#7a9cc8;margin-bottom:6px">車体番号（任意）</div>
       <input type="text" id="edit-frame" maxlength="20" placeholder="例: 3205612" style="width:100%;background:#0d1829;border:1px solid #2a4070;border-radius:8px;padding:12px;color:#e8edf5;font-size:18px;font-weight:700;outline:none;font-family:inherit;letter-spacing:1px">
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;color:#7a9cc8;margin-bottom:6px">集計日</div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1;position:relative;overflow:hidden;height:44px;background:#0d1829;border:1px solid #2a4070;border-radius:8px">
+          <div id="edit-drum-month" style="position:absolute;width:100%;transition:transform 0.2s;cursor:ns-resize;user-select:none"></div>
+        </div>
+        <div style="width:80px;position:relative;overflow:hidden;height:44px;background:#0d1829;border:1px solid #2a4070;border-radius:8px">
+          <div id="edit-drum-day" style="position:absolute;width:100%;transition:transform 0.2s;cursor:ns-resize;user-select:none"></div>
+        </div>
+      </div>
     </div>
     <div class="modal-btns">
       <button class="btn-sec" onclick="closeEditModal()">キャンセル</button>
@@ -1699,15 +1711,84 @@ function confirmReplace() {
 
 // ── Edit ───────────────────────────────────────────────────────────────────
 let editTargetId = null;
+let editDateTarget = new Date(); // 編集モーダル用の集計日
 function openEdit(id) {
   editTargetId = id;
   const item = history.find(h=>h.id===id);
   if(!item) return;
-  const digits = item.slip_number.replace(/^G/,"");
-  document.getElementById("edit-slip").value = digits;
+  document.getElementById("edit-slip").value = item.slip_number.replace(/^G/,"");
   document.getElementById("edit-amt").value = item.total_excl_tax;
   document.getElementById("edit-frame").value = item.frame_number || "";
+
+  // 集計日ドラム初期化
+  const cdKey = item.collection_date || (() => {
+    const d = new Date(item.real_scanned_at || item.scanned_at);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  })();
+  const [cy,cm,cd2] = cdKey.split("-").map(Number);
+  editDateTarget = new Date(cy, cm-1, cd2);
+  initEditDrum(editDateTarget);
+
   document.getElementById("edit-modal").classList.add("show");
+}
+
+function editLastEntry() {
+  if (history.length === 0) return;
+  // 最後に保存したエントリ（real_scanned_at が最新）
+  const last = [...history].sort((a,b) =>
+    new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at)
+  )[0];
+  openEdit(last.id);
+}
+
+// ── Edit Drum ───────────────────────────────────────────────────────────────
+function initEditDrum(date) {
+  const monthList = buildMonthList();
+  const targetYear = date.getFullYear();
+  const targetMonth = date.getMonth()+1;
+  const targetDay = date.getDate();
+
+  let mIdx = monthList.findIndex(m => m.year===targetYear && m.month===targetMonth);
+  if (mIdx < 0) mIdx = Math.floor(monthList.length/2);
+
+  const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+
+  // 月ドラム
+  const mEl = document.getElementById("edit-drum-month");
+  if (mEl) {
+    mEl.innerHTML = monthList.map((m,i) => {
+      const label = `${m.year !== new Date().getFullYear() ? m.year+'/' : ''}${m.month}月`;
+      return `<div class="drum-item" style="opacity:${i===mIdx?1:0.35}">${label}</div>`;
+    }).join("");
+    mEl.style.transform = `translateY(${-mIdx * ITEM_H}px)`;
+  }
+  // 日ドラム
+  const dEl = document.getElementById("edit-drum-day");
+  if (dEl) {
+    dEl.innerHTML = Array.from({length:daysInMonth},(_,i)=>
+      `<div class="drum-item" style="opacity:${i===targetDay-1?1:0.35}">${i+1}日</div>`
+    ).join("");
+    dEl.style.transform = `translateY(${-(targetDay-1) * ITEM_H}px)`;
+  }
+
+  setupDrumTouch("edit-drum-month", monthList.length, mIdx, (newIdx) => {
+    const m = monthList[newIdx];
+    const maxDay = new Date(m.year, m.month, 0).getDate();
+    const curDay = editDateTarget.getDate();
+    const day = Math.min(curDay, maxDay);
+    editDateTarget = new Date(m.year, m.month-1, day);
+    // 日ドラム再描画
+    const dEl2 = document.getElementById("edit-drum-day");
+    if (dEl2) {
+      dEl2.innerHTML = Array.from({length:maxDay},(_,i)=>
+        `<div class="drum-item" style="opacity:${i===day-1?1:0.35}">${i+1}日</div>`
+      ).join("");
+      dEl2.style.transform = `translateY(${-(day-1)*ITEM_H}px)`;
+    }
+  });
+  setupDrumTouch("edit-drum-day", daysInMonth, targetDay-1, (newIdx) => {
+    editDateTarget = new Date(editDateTarget.getFullYear(), editDateTarget.getMonth(), newIdx+1);
+  });
 }
 function closeEditModal() {
   document.getElementById("edit-modal").classList.remove("show");
@@ -1730,6 +1811,16 @@ function confirmEdit() {
   item.tax = Math.round(amt * item.tax_rate / 100);
   item.incl = amt + item.tax;
   item.frame_number = frameVal;
+
+  // 集計日更新
+  const cd = editDateTarget;
+  item.collection_date = `${cd.getFullYear()}-${String(cd.getMonth()+1).padStart(2,"0")}-${String(cd.getDate()).padStart(2,"0")}`;
+  item.billing_month = `${cd.getFullYear()}-${String(cd.getMonth()+1).padStart(2,"0")}`;
+  // scanned_at も更新（後方互換）
+  const lastDay = new Date(cd.getFullYear(), cd.getMonth()+1, 0);
+  lastDay.setHours(23,59,59,0);
+  item.scanned_at = lastDay.toISOString();
+
   fsSet("inv_history", history);
   closeEditModal();
   updateHeader(); updateRecentBar(); renderHistory(); updateStats();
