@@ -1368,6 +1368,14 @@ function renderHistory() {
     monthGrouped[mk].push(item);
   });
 
+  // ★月ヘッダー用：日ナビに関係なく月全体の集計
+  const allMonthGrouped = {};
+  filtered.forEach(item => {
+    const mk = getBillingKey(item);
+    if(!allMonthGrouped[mk]) allMonthGrouped[mk] = [];
+    allMonthGrouped[mk].push(item);
+  });
+
   const sortedMonthKeys = Object.keys(monthGrouped).sort((a,b) => b.localeCompare(a));
   const coLabel = co => co==="chiba" ? "🟥 千葉トヨタ" : co==="nets" ? "🟦 ネッツトヨタ" : "";
   const coBorderStyle = co => co==="chiba" ? "border-left:4px solid #ef4444;" : co==="nets" ? "border-left:4px solid #3b82f6;" : "";
@@ -1380,9 +1388,24 @@ function renderHistory() {
       return new Date(a.real_scanned_at||a.scanned_at) - new Date(b.real_scanned_at||b.scanned_at);
     });
 
-    const mExcl  = mItems.reduce((a,i)=>a+(i.total_excl_tax||0),0);
-    const mTax   = mItems.reduce((a,i)=>a+(i.tax||0),0);
-    const mIncl  = mItems.reduce((a,i)=>a+(i.incl||0),0);
+    // ★月全体データで集計
+    const allMItems = allMonthGrouped[mk] || [];
+    const mExcl  = allMItems.reduce((a,i)=>a+(i.total_excl_tax||0),0);
+    const mTax   = allMItems.reduce((a,i)=>a+(i.tax||0),0);
+    const mIncl  = allMItems.reduce((a,i)=>a+(i.incl||0),0);
+    const mCount = allMItems.length;
+    const mDays  = new Set(allMItems.map(i => getCollectionDateKey(i))).size;
+
+    // 千葉・ネッツ別集計
+    const chibaItems = allMItems.filter(i => i.company === "chiba");
+    const netsItems  = allMItems.filter(i => i.company === "nets");
+    const chibaExcl = chibaItems.reduce((a,i)=>a+(i.total_excl_tax||0),0);
+    const chibaTax  = chibaItems.reduce((a,i)=>a+(i.tax||0),0);
+    const chibaIncl = chibaItems.reduce((a,i)=>a+(i.incl||0),0);
+    const netsExcl  = netsItems.reduce((a,i)=>a+(i.total_excl_tax||0),0);
+    const netsTax   = netsItems.reduce((a,i)=>a+(i.tax||0),0);
+    const netsIncl  = netsItems.reduce((a,i)=>a+(i.incl||0),0);
+
     const [y,m]  = mk.split("-");
     const monthLabel = `${y}年${parseInt(m)}月分`;
     const mId = mk.replace("-","");
@@ -1472,17 +1495,40 @@ function renderHistory() {
 
     return `
       <div style="margin-bottom:16px">
-        <div onclick="toggleMonth('${mId}')" style="display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#0f2040,#1a3560);border:1px solid #2a4070;border-radius:12px;padding:12px 16px;margin-bottom:8px;cursor:pointer">
-          <div>
-            <div style="font-size:16px;font-weight:800;color:#f0c744">${monthLabel}</div>
-            <div style="font-size:11px;color:#5a7aa8;margin-top:2px">${mItems.length}枚</div>
+        <!-- ★月ヘッダー：月全体の集計 + 三角で千葉/ネッツ内訳 -->
+        <div style="background:linear-gradient(135deg,#0f2040,#1a3560);border:1px solid #2a4070;border-radius:12px;margin-bottom:8px;overflow:hidden">
+          <!-- メイン行 -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
+            <div>
+              <div style="font-size:16px;font-weight:800;color:#f0c744">${monthLabel}</div>
+              <div style="font-size:11px;color:#5a7aa8;margin-top:3px">${mCount}枚 ／ ${mDays}日間</div>
+            </div>
+            <div style="text-align:right;margin-right:10px">
+              <div style="font-size:12px;color:#7a9cc8">税抜 <span style="color:#e8edf5;font-weight:700">${fmt(mExcl)}円</span></div>
+              <div style="font-size:11px;color:#e05a2b">消費税 ${fmt(mTax)}円</div>
+              <div style="font-size:14px;font-weight:800;color:#f0c744">税込 ${fmt(mIncl)}円</div>
+            </div>
+            <div id="arrow-${mId}" onclick="toggleMonthBreak('${mId}')" style="font-size:18px;color:#5a7aa8;transition:transform 0.25s;cursor:pointer;padding:4px 2px;user-select:none">▲</div>
           </div>
-          <div style="text-align:right;margin-right:10px">
-            <div style="font-size:12px;color:#7a9cc8">税抜 <span style="color:#e8edf5;font-weight:700">${fmt(mExcl)}円</span></div>
-            <div style="font-size:11px;color:#e05a2b">消費税 ${fmt(mTax)}円</div>
-            <div style="font-size:14px;font-weight:800;color:#f0c744">税込 ${fmt(mIncl)}円</div>
+          <!-- 内訳パネル（開閉） -->
+          <div id="break-${mId}" style="display:none;border-top:1px solid #1e3050;padding:10px 14px;display:flex;gap:8px;display:none">
+            <!-- 千葉トヨタ -->
+            <div style="flex:1;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:10px;padding:10px 12px">
+              <div style="font-size:11px;font-weight:800;color:#f87171;margin-bottom:6px">🟥 千葉トヨタ</div>
+              <div style="font-size:11px;color:#5a7aa8;margin-bottom:2px">${chibaItems.length}枚</div>
+              <div style="font-size:12px;color:#c8d8f0">税抜 <span style="font-weight:700;color:#e8edf5">${fmt(chibaExcl)}円</span></div>
+              <div style="font-size:11px;color:#e05a2b">消費税 ${fmt(chibaTax)}円</div>
+              <div style="font-size:13px;font-weight:800;color:#f87171;margin-top:2px">税込 ${fmt(chibaIncl)}円</div>
+            </div>
+            <!-- ネッツトヨタ -->
+            <div style="flex:1;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:10px 12px">
+              <div style="font-size:11px;font-weight:800;color:#60a5fa;margin-bottom:6px">🟦 ネッツトヨタ</div>
+              <div style="font-size:11px;color:#5a7aa8;margin-bottom:2px">${netsItems.length}枚</div>
+              <div style="font-size:12px;color:#c8d8f0">税抜 <span style="font-weight:700;color:#e8edf5">${fmt(netsExcl)}円</span></div>
+              <div style="font-size:11px;color:#e05a2b">消費税 ${fmt(netsTax)}円</div>
+              <div style="font-size:13px;font-weight:800;color:#60a5fa;margin-top:2px">税込 ${fmt(netsIncl)}円</div>
+            </div>
           </div>
-          <div id="arrow-${mId}" style="font-size:16px;color:#5a7aa8;transition:transform 0.2s">▲</div>
         </div>
         <div id="month-${mId}">${daysHtml}</div>
       </div>`;
@@ -1560,6 +1606,16 @@ function switchCoTab(co) {
 }
 
 // ── Month toggle ───────────────────────────────────────────────────────────
+function toggleMonthBreak(mId) {
+  const panel = document.getElementById("break-"+mId);
+  const arrow = document.getElementById("arrow-"+mId);
+  if (!panel) return;
+  const isOpen = panel.style.display !== "none";
+  panel.style.display = isOpen ? "none" : "flex";
+  arrow.style.transform = isOpen ? "" : "rotate(180deg)";
+  arrow.style.color = isOpen ? "#5a7aa8" : "#f0c744";
+}
+
 function toggleMonth(mId) {
   const content = document.getElementById("month-"+mId);
   const arrow = document.getElementById("arrow-"+mId);
