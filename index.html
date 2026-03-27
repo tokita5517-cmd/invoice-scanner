@@ -177,7 +177,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v3</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v4</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -340,32 +340,59 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
   <!-- HISTORY -->
   <div class="page" id="page-history">
     <div style="position:sticky;top:0;z-index:5;background:#0d1829;padding-bottom:10px">
-      <div style="display:flex;gap:4px;background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:4px;margin-bottom:8px">
-        <button class="co-tab active" id="co-tab-all" onclick="switchCoTab('all')">📋 全社</button>
-        <button class="co-tab" id="co-tab-chiba" onclick="switchCoTab('chiba')" style="color:#f87171">🟥 千葉トヨタ</button>
-        <button class="co-tab" id="co-tab-nets" onclick="switchCoTab('nets')" style="color:#60a5fa">🟦 ネッツトヨタ</button>
+
+      <!-- 履歴サブタブ -->
+      <div style="display:flex;gap:0;border-bottom:1px solid #1e3050;margin-bottom:8px">
+        <button id="htab-list" onclick="switchHistTab('list')" style="flex:1;padding:8px 4px;background:none;border:none;border-bottom:2px solid #f0c744;color:#f0c744;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">📋 一覧</button>
+        <button id="htab-day" onclick="switchHistTab('day')" style="flex:1;padding:8px 4px;background:none;border:none;border-bottom:2px solid transparent;color:#5a7aa8;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">📊 日別比較</button>
+        <button id="htab-month" onclick="switchHistTab('month')" style="flex:1;padding:8px 4px;background:none;border:none;border-bottom:2px solid transparent;color:#5a7aa8;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">📈 月別比較</button>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;background:#111f38;border:1px solid #2a4070;border-radius:12px;padding:8px 14px;margin-bottom:8px">
-        <span style="font-size:16px">🔍</span>
-        <input type="text" id="search-inp" placeholder="伝票番号 or 車体番号で検索" oninput="renderHistory()" inputmode="numeric"
-          style="flex:1;background:none;border:none;color:#e8edf5;font-size:14px;outline:none;font-family:inherit">
-        <button onclick="document.getElementById('search-inp').value='';renderHistory()" style="background:none;border:none;color:#5a7aa8;cursor:pointer;font-size:14px;padding:0">✕</button>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <div style="display:flex;align-items:center;gap:4px;background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:5px 10px;flex:1">
-          <span style="font-size:13px">📅</span>
-          <input type="date" id="date-filter" onchange="renderHistory()"
-            style="background:none;border:none;color:#e8edf5;font-size:12px;outline:none;font-family:inherit;flex:1;min-width:0">
-          <button onclick="document.getElementById('date-filter').value='';renderHistory()" style="background:none;border:none;color:#5a7aa8;cursor:pointer;font-size:12px;padding:0">✕</button>
+
+      <!-- 一覧専用コントロール -->
+      <div id="hist-controls-list">
+        <div style="display:flex;gap:4px;background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:4px;margin-bottom:8px">
+          <button class="co-tab active" id="co-tab-all" onclick="switchCoTab('all')">📋 全社</button>
+          <button class="co-tab" id="co-tab-chiba" onclick="switchCoTab('chiba')" style="color:#f87171">🟥 千葉トヨタ</button>
+          <button class="co-tab" id="co-tab-nets" onclick="switchCoTab('nets')" style="color:#60a5fa">🟦 ネッツトヨタ</button>
         </div>
-        <button id="filter-replaced-btn" onclick="toggleReplacedFilter()" style="background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:6px 10px;color:#7a9cc8;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">差替済のみ</button>
-        <button id="sort-btn" onclick="toggleSort()" style="background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:6px 10px;color:#7a9cc8;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📷スキャン順</button>
+        <div style="display:flex;align-items:center;gap:8px;background:#111f38;border:1px solid #2a4070;border-radius:12px;padding:8px 14px;margin-bottom:8px">
+          <span style="font-size:16px">🔍</span>
+          <input type="text" id="search-inp" placeholder="伝票番号 or 車体番号で検索" oninput="renderHistory()" inputmode="numeric"
+            style="flex:1;background:none;border:none;color:#e8edf5;font-size:14px;outline:none;font-family:inherit">
+          <button onclick="document.getElementById('search-inp').value='';renderHistory()" style="background:none;border:none;color:#5a7aa8;cursor:pointer;font-size:14px;padding:0">✕</button>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <div style="display:flex;align-items:center;gap:4px;background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:5px 10px;flex:1">
+            <span style="font-size:13px">📅</span>
+            <input type="date" id="date-filter" onchange="renderHistory()"
+              style="background:none;border:none;color:#e8edf5;font-size:12px;outline:none;font-family:inherit;flex:1;min-width:0">
+            <button onclick="document.getElementById('date-filter').value='';renderHistory()" style="background:none;border:none;color:#5a7aa8;cursor:pointer;font-size:12px;padding:0">✕</button>
+          </div>
+          <button id="filter-replaced-btn" onclick="toggleReplacedFilter()" style="background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:6px 10px;color:#7a9cc8;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">差替済のみ</button>
+          <button id="sort-btn" onclick="toggleSort()" style="background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:6px 10px;color:#7a9cc8;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📷スキャン順</button>
+        </div>
+        <!-- 月送り・月戻しバー -->
+        <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+          <button onclick="moveMonthNav(-1)" style="background:#1e3050;border:1px solid #2a4070;border-radius:8px;padding:7px 12px;color:#e8edf5;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">‹ 前月</button>
+          <div id="month-nav-label" style="flex:1;background:#111f38;border:1px solid #2a4070;border-radius:8px;padding:7px;text-align:center;font-size:12px;font-weight:700;color:#a8bde8;cursor:pointer" onclick="clearMonthNav()">全期間</div>
+          <button onclick="moveMonthNav(1)" style="background:#1e3050;border:1px solid #2a4070;border-radius:8px;padding:7px 12px;color:#e8edf5;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">次月 ›</button>
+        </div>
+        <div id="day-nav" style="display:flex;align-items:center;gap:6px;margin-top:8px">
+          <button onclick="moveDayNav(1)" style="background:#1e3050;border:1px solid #2a4070;border-radius:8px;width:38px;height:38px;color:#e8edf5;font-size:20px;cursor:pointer;flex-shrink:0">‹</button>
+          <div id="day-nav-label" style="flex:1;background:#111f38;border:1px solid #2a4070;border-radius:8px;padding:8px;text-align:center;font-size:14px;font-weight:700;color:#f0c744;cursor:pointer" onclick="resetDayNav()">—</div>
+          <button onclick="moveDayNav(-1)" style="background:#1e3050;border:1px solid #2a4070;border-radius:8px;width:38px;height:38px;color:#e8edf5;font-size:20px;cursor:pointer;flex-shrink:0">›</button>
+        </div>
       </div>
-      <div id="day-nav" style="display:flex;align-items:center;gap:6px;margin-top:8px">
-        <button onclick="moveDayNav(1)" style="background:#1e3050;border:1px solid #2a4070;border-radius:8px;width:38px;height:38px;color:#e8edf5;font-size:20px;cursor:pointer;flex-shrink:0">‹</button>
-        <div id="day-nav-label" style="flex:1;background:#111f38;border:1px solid #2a4070;border-radius:8px;padding:8px;text-align:center;font-size:14px;font-weight:700;color:#f0c744;cursor:pointer" onclick="resetDayNav()">—</div>
-        <button onclick="moveDayNav(-1)" style="background:#1e3050;border:1px solid #2a4070;border-radius:8px;width:38px;height:38px;color:#e8edf5;font-size:20px;cursor:pointer;flex-shrink:0">›</button>
+
+      <!-- 比較ビュー用コントロール -->
+      <div id="hist-controls-cmp" style="display:none">
+        <div style="display:flex;gap:4px;background:#111f38;border:1px solid #2a4070;border-radius:10px;padding:4px;margin-bottom:8px">
+          <button class="co-tab active" id="co-tab-cmp-all" onclick="switchCoTabCmp('all')">📋 全社</button>
+          <button class="co-tab" id="co-tab-cmp-chiba" onclick="switchCoTabCmp('chiba')" style="color:#f87171">🟥 千葉トヨタ</button>
+          <button class="co-tab" id="co-tab-cmp-nets" onclick="switchCoTabCmp('nets')" style="color:#60a5fa">🟦 ネッツトヨタ</button>
+        </div>
       </div>
+
     </div>
     <div id="history-content" style="touch-action:pan-y"></div>
   </div>
@@ -519,6 +546,9 @@ let taxRate = 10;
 let deleteTargetId = null;
 let currentTab = "scan";
 let currentCoTab = "all";
+let currentHistTab = "list"; // "list" | "day" | "month"
+let currentCoTabCmp = "all"; // 比較ビュー用
+let currentMonthFilter = null; // "YYYY-MM" or null
 let pendingOCRData = null;
 let currentCollectionDate = null;
 let sortByScanned = false;
@@ -599,6 +629,306 @@ function switchTab(tab) {
   document.getElementById("tab-"+tab).classList.add("active");
   document.getElementById("recent-bar").style.display = (tab==="scan" && history.length>0) ? "flex" : "none";
   if(tab==="settings") updateStats();
+  if(tab==="history") renderHistView();
+}
+
+// ── 履歴サブタブ ──────────────────────────────────────────────────────────
+function switchHistTab(htab) {
+  currentHistTab = htab;
+  ["list","day","month"].forEach(t => {
+    const btn = document.getElementById("htab-"+t);
+    if (!btn) return;
+    const active = t === htab;
+    btn.style.borderBottomColor = active ? "#f0c744" : "transparent";
+    btn.style.color = active ? "#f0c744" : "#5a7aa8";
+  });
+  // コントロールの切り替え
+  const listCtrl = document.getElementById("hist-controls-list");
+  const cmpCtrl  = document.getElementById("hist-controls-cmp");
+  if (listCtrl) listCtrl.style.display = htab === "list" ? "block" : "none";
+  if (cmpCtrl)  cmpCtrl.style.display  = htab !== "list" ? "block" : "none";
+  renderHistView();
+}
+
+function renderHistView() {
+  if (currentHistTab === "day")   { renderHistDayComparison(); return; }
+  if (currentHistTab === "month") { renderHistMonthComparison(); return; }
+  renderHistory();
+}
+
+// 比較ビュー用会社タブ
+function switchCoTabCmp(co) {
+  currentCoTabCmp = co;
+  ["all","chiba","nets"].forEach(c => {
+    const btn = document.getElementById("co-tab-cmp-"+c);
+    if (btn) btn.classList.toggle("active", c===co);
+  });
+  renderHistView();
+}
+
+// ── 月送り・月戻しボタン ──────────────────────────────────────────────────
+function moveMonthNav(delta) {
+  const allMonths = [...new Set(history.map(item => {
+    const mk = item.billing_month || getCdKey(item).slice(0,7);
+    return mk;
+  }))].sort((a,b) => a.localeCompare(b));
+
+  if (allMonths.length === 0) return;
+
+  if (!currentMonthFilter) {
+    // 全期間表示中 → delta>0なら最新月、delta<0なら最古月
+    currentMonthFilter = delta > 0 ? allMonths[allMonths.length-1] : allMonths[0];
+  } else {
+    const idx = allMonths.indexOf(currentMonthFilter);
+    const newIdx = Math.max(0, Math.min(allMonths.length-1, idx + delta));
+    currentMonthFilter = allMonths[newIdx];
+  }
+  updateMonthNavLabel();
+  renderHistory();
+}
+
+function clearMonthNav() {
+  currentMonthFilter = null;
+  updateMonthNavLabel();
+  renderHistory();
+}
+
+function updateMonthNavLabel() {
+  const el = document.getElementById("month-nav-label");
+  if (!el) return;
+  if (!currentMonthFilter) {
+    el.textContent = "全期間";
+    el.style.color = "#a8bde8";
+  } else {
+    const [y,m] = currentMonthFilter.split("-");
+    el.textContent = `${y}年${parseInt(m)}月`;
+    el.style.color = "#f0c744";
+  }
+}
+
+// getCdKey は既存関数を使用
+function getItemMonthKey(item) {
+  return item.billing_month || getCdKey(item).slice(0,7);
+}
+
+// ── 日別比較（モバイル版）────────────────────────────────────────────────
+function renderHistDayComparison() {
+  const el = document.getElementById("history-content");
+  let data = history;
+  if (currentCoTabCmp !== "all") data = data.filter(d => d.company === currentCoTabCmp);
+
+  if (data.length === 0) {
+    el.innerHTML = `<div style="text-align:center;padding:60px 0;color:#6b7c9d;font-size:15px">📊 データがありません</div>`;
+    return;
+  }
+
+  // 日別グループ化
+  const dayMap = {};
+  data.forEach(item => {
+    const dk = getCdKey(item);
+    if (!dayMap[dk]) dayMap[dk] = {chiba:[], nets:[], all:[]};
+    dayMap[dk].all.push(item);
+    if (item.company === "chiba") dayMap[dk].chiba.push(item);
+    if (item.company === "nets")  dayMap[dk].nets.push(item);
+  });
+
+  const sortedDays = Object.keys(dayMap).sort((a,b) => b.localeCompare(a));
+  const maxIncl = Math.max(...sortedDays.map(dk => dayMap[dk].all.reduce((s,i)=>s+(i.incl||0),0)));
+  const wkdays = ["日","月","火","水","木","金","土"];
+
+  el.innerHTML = sortedDays.map(dk => {
+    const d = dayMap[dk];
+    const chibaExcl = d.chiba.reduce((s,i)=>s+(i.total_excl_tax||0),0);
+    const netsExcl  = d.nets.reduce((s,i)=>s+(i.total_excl_tax||0),0);
+    const chibaIncl = d.chiba.reduce((s,i)=>s+(i.incl||0),0);
+    const netsIncl  = d.nets.reduce((s,i)=>s+(i.incl||0),0);
+    const totalExcl = d.all.reduce((s,i)=>s+(i.total_excl_tax||0),0);
+    const totalIncl = d.all.reduce((s,i)=>s+(i.incl||0),0);
+    const [y,m,day] = dk.split("-");
+    const dow = wkdays[new Date(parseInt(y),parseInt(m)-1,parseInt(day)).getDay()];
+    const dowColor = dow==="日"?"#f87171":dow==="土"?"#60a5fa":"#a8bde8";
+    const barPct = maxIncl > 0 ? Math.round(totalIncl / maxIncl * 100) : 0;
+    const chibaPct = totalIncl > 0 ? Math.round(chibaIncl / totalIncl * 100) : 0;
+    const safeId = dk.replace(/-/g,"");
+
+    // 詳細行
+    const detailRows = [...d.all].sort((a,b)=>
+      new Date(a.real_scanned_at||a.scanned_at)-new Date(b.real_scanned_at||b.scanned_at)
+    ).map((item, idx) => {
+      const co = item.company;
+      const coStyle = co==="chiba"?"color:#f87171":co==="nets"?"color:#60a5fa":"color:#5a7aa8";
+      const coLabel = co==="chiba"?"🟥":"co==="nets"?"🟦":"—";
+      return `<div style="display:flex;align-items:center;padding:8px 14px;border-bottom:1px solid #1a2e4a;gap:8px">
+        <span style="font-size:10px;color:#3a5070;min-width:18px">${idx+1}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700">${item.slip_number}</div>
+          <div style="font-size:10px;${coStyle}">${co==="chiba"?"🟥 千葉":co==="nets"?"🟦 ネッツ":"—"} ${item.frame_number ? "🚗 "+item.frame_number : ""}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:12px;font-weight:700">${fmt(item.total_excl_tax)}</div>
+          <div style="font-size:10px;color:#f0c744">${fmt(item.incl)}</div>
+        </div>
+      </div>`;
+    }).join("");
+
+    return `<div style="margin-bottom:8px;background:#0f1e36;border-radius:12px;overflow:hidden;border:1px solid #1e3050">
+      <!-- ヘッダー行 -->
+      <div onclick="toggleHistDayDetail('${safeId}')" style="padding:12px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:15px;font-weight:800;color:${dowColor}">${parseInt(m)}/${parseInt(day)}(${dow})</span>
+          <span style="font-size:11px;color:#5a7aa8">${d.all.length}枚</span>
+          <span style="margin-left:auto;font-size:15px;font-weight:800;color:#f0c744">${fmt(totalIncl)}円</span>
+          <span id="hda-${safeId}" style="font-size:13px;color:#5a7aa8">▼</span>
+        </div>
+        <!-- 千葉・ネッツ横並び -->
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          ${d.chiba.length > 0 ? `<div style="flex:1;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:6px 8px">
+            <div style="font-size:9px;font-weight:700;color:#f87171;margin-bottom:2px">🟥 千葉 ${d.chiba.length}枚</div>
+            <div style="font-size:12px;font-weight:700;font-family:monospace;color:#fca5a5">${fmt(chibaExcl)}円</div>
+            <div style="font-size:9px;color:#5a7aa8">税込 ${fmt(chibaIncl)}円</div>
+          </div>` : `<div style="flex:1;background:#0a1525;border:1px solid #1e3050;border-radius:8px;padding:6px 8px;opacity:.4">
+            <div style="font-size:9px;color:#3a5070">🟥 千葉</div><div style="font-size:11px;color:#3a5070">—</div></div>`}
+          ${d.nets.length > 0 ? `<div style="flex:1;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:6px 8px">
+            <div style="font-size:9px;font-weight:700;color:#60a5fa;margin-bottom:2px">🟦 ネッツ ${d.nets.length}枚</div>
+            <div style="font-size:12px;font-weight:700;font-family:monospace;color:#93c5fd">${fmt(netsExcl)}円</div>
+            <div style="font-size:9px;color:#5a7aa8">税込 ${fmt(netsIncl)}円</div>
+          </div>` : `<div style="flex:1;background:#0a1525;border:1px solid #1e3050;border-radius:8px;padding:6px 8px;opacity:.4">
+            <div style="font-size:9px;color:#3a5070">🟦 ネッツ</div><div style="font-size:11px;color:#3a5070">—</div></div>`}
+        </div>
+        <!-- バーグラフ -->
+        <div style="height:8px;background:#1e3050;border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${chibaPct * barPct / 100}%;background:#ef4444;opacity:.7;float:left;border-radius:4px 0 0 4px"></div>
+          <div style="height:100%;width:${(100-chibaPct) * barPct / 100}%;background:#3b82f6;opacity:.7;float:left"></div>
+        </div>
+      </div>
+      <!-- 詳細（展開） -->
+      <div id="hdd-${safeId}" style="display:none;border-top:1px solid #1e3050">
+        ${detailRows}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function toggleHistDayDetail(safeId) {
+  const el = document.getElementById("hdd-"+safeId);
+  const ar = document.getElementById("hda-"+safeId);
+  if (!el) return;
+  const open = el.style.display !== "block";
+  el.style.display = open ? "block" : "none";
+  ar.textContent = open ? "▲" : "▼";
+  ar.style.color = open ? "#f0c744" : "#5a7aa8";
+}
+
+// ── 月別比較（モバイル版）────────────────────────────────────────────────
+function renderHistMonthComparison() {
+  const el = document.getElementById("history-content");
+  let data = history;
+  if (currentCoTabCmp !== "all") data = data.filter(d => d.company === currentCoTabCmp);
+
+  if (data.length === 0) {
+    el.innerHTML = `<div style="text-align:center;padding:60px 0;color:#6b7c9d;font-size:15px">📈 データがありません</div>`;
+    return;
+  }
+
+  // 月別グループ化
+  const monthMap = {};
+  data.forEach(item => {
+    const mk = getItemMonthKey(item);
+    if (!monthMap[mk]) monthMap[mk] = {chiba:[], nets:[], all:[]};
+    monthMap[mk].all.push(item);
+    if (item.company === "chiba") monthMap[mk].chiba.push(item);
+    if (item.company === "nets")  monthMap[mk].nets.push(item);
+  });
+
+  const sortedMonths = Object.keys(monthMap).sort((a,b) => b.localeCompare(a));
+  const maxIncl = Math.max(...sortedMonths.map(mk => monthMap[mk].all.reduce((s,i)=>s+(i.incl||0),0)));
+
+  // 全期間集計
+  const grandChibaIncl = sortedMonths.reduce((s,mk)=>s+monthMap[mk].chiba.reduce((ss,i)=>ss+(i.incl||0),0),0);
+  const grandNetsIncl  = sortedMonths.reduce((s,mk)=>s+monthMap[mk].nets.reduce((ss,i)=>ss+(i.incl||0),0),0);
+  const grandTotalIncl = grandChibaIncl + grandNetsIncl;
+  const grandCount = sortedMonths.reduce((s,mk)=>s+monthMap[mk].all.length,0);
+
+  el.innerHTML = `
+    <!-- サマリーカード -->
+    <div style="background:#111f38;border:1px solid #2a4070;border-radius:14px;padding:14px;margin-bottom:12px">
+      <div style="font-size:10px;color:#5a7aa8;font-weight:700;letter-spacing:2px;margin-bottom:8px">全期間 合計</div>
+      <div style="font-size:24px;font-weight:900;color:#f0c744;margin-bottom:4px">${fmt(grandTotalIncl)}円</div>
+      <div style="font-size:11px;color:#5a7aa8;margin-bottom:10px">${grandCount}枚</div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:8px">
+          <div style="font-size:9px;color:#f87171;font-weight:700;margin-bottom:3px">🟥 千葉トヨタ</div>
+          <div style="font-size:14px;font-weight:800;color:#fca5a5">${fmt(grandChibaIncl)}円</div>
+        </div>
+        <div style="flex:1;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:8px">
+          <div style="font-size:9px;color:#60a5fa;font-weight:700;margin-bottom:3px">🟦 ネッツトヨタ</div>
+          <div style="font-size:14px;font-weight:800;color:#93c5fd">${fmt(grandNetsIncl)}円</div>
+        </div>
+      </div>
+    </div>
+    <!-- 月別リスト -->
+    ${sortedMonths.map((mk, idx) => {
+      const d = monthMap[mk];
+      const chibaExcl = d.chiba.reduce((s,i)=>s+(i.total_excl_tax||0),0);
+      const netsExcl  = d.nets.reduce((s,i)=>s+(i.total_excl_tax||0),0);
+      const chibaIncl = d.chiba.reduce((s,i)=>s+(i.incl||0),0);
+      const netsIncl  = d.nets.reduce((s,i)=>s+(i.incl||0),0);
+      const totalExcl = d.all.reduce((s,i)=>s+(i.total_excl_tax||0),0);
+      const totalIncl = d.all.reduce((s,i)=>s+(i.incl||0),0);
+      const [y,m] = mk.split("-");
+      const label = `${y}年${parseInt(m)}月`;
+      const days = new Set(d.all.map(i => getCdKey(i))).size;
+      const barPct = maxIncl > 0 ? Math.round(totalIncl / maxIncl * 100) : 0;
+      const chibaPct = totalIncl > 0 ? Math.round(chibaIncl / totalIncl * 100) : 0;
+
+      // 前月比
+      let diffHtml = "";
+      const prevMk = sortedMonths[idx + 1];
+      if (prevMk) {
+        const prevIncl = monthMap[prevMk].all.reduce((s,i)=>s+(i.incl||0),0);
+        if (prevIncl > 0) {
+          const diff = Math.round((totalIncl - prevIncl) / prevIncl * 100);
+          const col = diff >= 0 ? "#4ade80" : "#f87171";
+          diffHtml = `<span style="font-size:10px;color:${col};font-weight:700">${diff>=0?"▲":"▼"}${Math.abs(diff)}%</span>`;
+        }
+      }
+
+      return `<div onclick="histMonthClick('${mk}')" style="background:#0f1e36;border:1px solid #1e3050;border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:border-color .15s" onmouseover="" onmouseout="">
+        <div style="display:flex;align-items:center;margin-bottom:8px">
+          <span style="font-size:15px;font-weight:800;color:#f0c744">${label}</span>
+          <span style="font-size:10px;color:#5a7aa8;margin-left:8px">${d.all.length}枚 / ${days}日</span>
+          <span style="margin-left:auto;font-size:11px;color:#5a7aa8">${diffHtml}</span>
+          <span style="font-size:11px;color:#5a7aa8;margin-left:6px">›</span>
+        </div>
+        <div style="font-size:18px;font-weight:800;font-family:monospace;color:#e8edf5;margin-bottom:8px">${fmt(totalIncl)}<span style="font-size:11px;color:#5a7aa8">円（税込）</span></div>
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <div style="flex:1;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.15);border-radius:7px;padding:6px 8px">
+            <div style="font-size:9px;color:#f87171;font-weight:700;margin-bottom:2px">🟥 千葉 ${d.chiba.length}枚</div>
+            <div style="font-size:12px;font-weight:700;font-family:monospace;color:#fca5a5">${fmt(chibaExcl)}円</div>
+          </div>
+          <div style="flex:1;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.15);border-radius:7px;padding:6px 8px">
+            <div style="font-size:9px;color:#60a5fa;font-weight:700;margin-bottom:2px">🟦 ネッツ ${d.nets.length}枚</div>
+            <div style="font-size:12px;font-weight:700;font-family:monospace;color:#93c5fd">${fmt(netsExcl)}円</div>
+          </div>
+        </div>
+        <!-- 割合バー -->
+        <div style="height:6px;background:#1e3050;border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${chibaPct * barPct / 100}%;background:#ef4444;opacity:.8;float:left;border-radius:3px 0 0 3px"></div>
+          <div style="height:100%;width:${(100-chibaPct) * barPct / 100}%;background:#3b82f6;opacity:.8;float:left"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:3px">
+          <span style="font-size:9px;color:#f87171">千葉 ${chibaPct}%</span>
+          <span style="font-size:9px;color:#60a5fa">ネッツ ${100-chibaPct}%</span>
+        </div>
+      </div>`;
+    }).join("")}`;
+}
+
+function histMonthClick(mk) {
+  // 月別比較からタップ → その月を一覧で表示
+  currentMonthFilter = mk;
+  updateMonthNavLabel();
+  switchHistTab("list");
 }
 
 // ── Camera ─────────────────────────────────────────────────────────────────
@@ -1272,6 +1602,9 @@ function renderHistory() {
 
   let filtered = history;
   if (currentCoTab !== "all") filtered = filtered.filter(h => h.company === currentCoTab);
+  if (currentMonthFilter) filtered = filtered.filter(h =>
+    (h.billing_month || (h.collection_date || "").slice(0,7)) === currentMonthFilter
+  );
   if (searchVal)   filtered = filtered.filter(h =>
     h.slip_number.replace(/^G/,"").startsWith(searchVal) ||
     (h.frame_number && h.frame_number.includes(searchVal))
