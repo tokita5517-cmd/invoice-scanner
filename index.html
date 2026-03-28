@@ -177,7 +177,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v5</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v6</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -723,15 +723,10 @@ function getItemMonthKey(item) {
 // ── 日別比較（モバイル版）────────────────────────────────────────────────
 function renderHistDayComparison() {
   const el = document.getElementById("history-content");
-  const appHistory = window._appHistory || [];
-  let data = appHistory.slice();
-  if (currentCoTabCmp !== "all") data = data.filter(d => d.company === currentCoTabCmp);
+  const data = (window._appHistory || []).slice();
+  const wkdays = ["日","月","火","水","木","金","土"];
 
-  if (data.length === 0) {
-    el.innerHTML = `<div style="text-align:center;padding:60px 0;color:#6b7c9d">データがありません</div>`;
-    return;
-  }
-
+  // 日別グループ化
   const dayMap = {};
   data.forEach(item => {
     const dk = getCdKey(item);
@@ -741,83 +736,51 @@ function renderHistDayComparison() {
     if (item.company === "nets")  dayMap[dk].nets.push(item);
   });
 
-  const sortedDays = Object.keys(dayMap).sort((a,b) => b.localeCompare(a));
-  const wkdays = ["日","月","火","水","木","金","土"];
+  const days = Object.keys(dayMap).sort((a,b) => b.localeCompare(a));
+  if (days.length === 0) {
+    el.innerHTML = `<div class="empty-box"><div style="font-size:36px">📊</div>データがありません</div>`;
+    return;
+  }
 
-  el.innerHTML = `<div style="padding:4px 0">` + sortedDays.map(dk => {
+  el.innerHTML = days.map(dk => {
     const d = dayMap[dk];
     const chibaExcl = d.chiba.reduce((s,i)=>s+(i.total_excl_tax||0),0);
     const netsExcl  = d.nets.reduce((s,i)=>s+(i.total_excl_tax||0),0);
-    const chibaIncl = d.chiba.reduce((s,i)=>s+(i.incl||0),0);
-    const netsIncl  = d.nets.reduce((s,i)=>s+(i.incl||0),0);
+    const totalExcl = d.all.reduce((s,i)=>s+(i.total_excl_tax||0),0);
     const totalIncl = d.all.reduce((s,i)=>s+(i.incl||0),0);
     const [y,m,day] = dk.split("-");
     const dow = wkdays[new Date(parseInt(y),parseInt(m)-1,parseInt(day)).getDay()];
     const dowColor = dow==="日"?"#f87171":dow==="土"?"#60a5fa":"#e8edf5";
-    const safeId = dk.replace(/-/g,"");
 
-    // 詳細行（伝票一覧）
-    const detailRows = [...d.all].sort((a,b)=>
-      new Date(a.real_scanned_at||a.scanned_at)-new Date(b.real_scanned_at||b.scanned_at)
-    ).map((item, idx) => {
-      const co = item.company;
-      const coColor = co==="chiba"?"#f87171":co==="nets"?"#60a5fa":"#5a7aa8";
-      const coMark = co==="chiba"?"🟥":co==="nets"?"🟦":"—";
-      return `<div style="display:flex;align-items:center;padding:7px 14px 7px 20px;border-bottom:1px solid #131e30;gap:8px">
-        <span style="font-size:10px;color:#3a5070;min-width:20px;flex-shrink:0">${idx+1}</span>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:#e8edf5">${item.slip_number}</div>
-          <div style="font-size:10px;color:${coColor}">${coMark} ${item.frame_number||""}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0">
-          <div style="font-size:11px;color:#c8d8f0">${fmt(item.total_excl_tax)}</div>
-          <div style="font-size:11px;font-weight:700;color:#f0c744">${fmt(item.incl)}</div>
-        </div>
-      </div>`;
-    }).join("");
-
-    return `<div style="border-bottom:1px solid #1e3050">
-      <!-- 日付行（タップで展開） -->
-      <div onclick="toggleHistDayDetail('${safeId}')" style="display:flex;align-items:center;padding:11px 14px;cursor:pointer;background:#0d1829;gap:6px">
-        <span style="font-size:14px;font-weight:800;color:${dowColor};min-width:80px">${parseInt(m)}/${parseInt(day)}(${dow})</span>
-        <span style="font-size:10px;color:#5a7aa8;flex-shrink:0">${d.all.length}枚</span>
-        <div style="flex:1;display:flex;gap:6px;justify-content:flex-end">
-          ${d.chiba.length>0 ? `<div style="text-align:center"><div style="font-size:9px;color:#f87171">千葉</div><div style="font-size:11px;font-weight:700;color:#fca5a5;font-family:monospace">${fmt(chibaExcl)}</div></div>` : ""}
-          ${d.nets.length>0  ? `<div style="text-align:center"><div style="font-size:9px;color:#60a5fa">ネッツ</div><div style="font-size:11px;font-weight:700;color:#93c5fd;font-family:monospace">${fmt(netsExcl)}</div></div>` : ""}
-          <div style="text-align:right;min-width:70px"><div style="font-size:9px;color:#5a7aa8">税込計</div><div style="font-size:13px;font-weight:800;color:#f0c744;font-family:monospace">${fmt(totalIncl)}</div></div>
-        </div>
-        <span id="hda-${safeId}" style="font-size:12px;color:#3a5070;flex-shrink:0;margin-left:4px">▼</span>
+    return `<div onclick="histDayClick('${dk}')" style="display:flex;align-items:center;padding:11px 14px;border-bottom:1px solid #1e3050;cursor:pointer;gap:6px">
+      <div style="min-width:82px">
+        <span style="font-size:14px;font-weight:800;color:${dowColor}">${parseInt(m)}/${parseInt(day)}(${dow})</span>
+        <div style="font-size:10px;color:#5a7aa8;margin-top:1px">${d.all.length}枚</div>
       </div>
-      <!-- 詳細（デフォルト非表示） -->
-      <div id="hdd-${safeId}" style="display:none;background:#0a1424">
-        ${detailRows}
+      <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+        ${d.chiba.length>0 ? `<div style="font-size:10px"><span style="color:#f87171">千葉</span> <span style="font-family:monospace;color:#fca5a5">${fmt(chibaExcl)}円</span></div>` : ""}
+        ${d.nets.length>0  ? `<div style="font-size:10px"><span style="color:#60a5fa">ネッツ</span> <span style="font-family:monospace;color:#93c5fd">${fmt(netsExcl)}円</span></div>` : ""}
       </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:11px;color:#c8d8f0;font-family:monospace">${fmt(totalExcl)}円</div>
+        <div style="font-size:14px;font-weight:800;color:#f0c744;font-family:monospace">${fmt(totalIncl)}円</div>
+      </div>
+      <span style="font-size:13px;color:#3a5070;margin-left:4px">›</span>
     </div>`;
-  }).join("") + `</div>`;
+  }).join("");
 }
 
-function toggleHistDayDetail(safeId) {
-  const el = document.getElementById("hdd-"+safeId);
-  const ar = document.getElementById("hda-"+safeId);
-  if (!el) return;
-  const open = el.style.display !== "block";
-  el.style.display = open ? "block" : "none";
-  ar.textContent = open ? "▲" : "▼";
-  ar.style.color = open ? "#f0c744" : "#3a5070";
+function histDayClick(dk) {
+  // その日の一覧へ
+  document.getElementById("date-filter").value = dk;
+  switchHistTab("list");
 }
 
-// ── 月別比較（モバイル版）────────────────────────────────────────────────
 function renderHistMonthComparison() {
   const el = document.getElementById("history-content");
-  const appHistory = window._appHistory || [];
-  let data = appHistory.slice();
-  if (currentCoTabCmp !== "all") data = data.filter(d => d.company === currentCoTabCmp);
+  const data = (window._appHistory || []).slice();
 
-  if (data.length === 0) {
-    el.innerHTML = `<div style="text-align:center;padding:60px 0;color:#6b7c9d">データがありません</div>`;
-    return;
-  }
-
+  // 月別グループ化
   const monthMap = {};
   data.forEach(item => {
     const mk = getItemMonthKey(item);
@@ -827,78 +790,62 @@ function renderHistMonthComparison() {
     if (item.company === "nets")  monthMap[mk].nets.push(item);
   });
 
-  const sortedMonths = Object.keys(monthMap).sort((a,b) => b.localeCompare(a));
+  const months = Object.keys(monthMap).sort((a,b) => b.localeCompare(a));
+  if (months.length === 0) {
+    el.innerHTML = `<div class="empty-box"><div style="font-size:36px">📈</div>データがありません</div>`;
+    return;
+  }
 
-  const grandChibaIncl = sortedMonths.reduce((s,mk)=>s+monthMap[mk].chiba.reduce((ss,i)=>ss+(i.incl||0),0),0);
-  const grandNetsIncl  = sortedMonths.reduce((s,mk)=>s+monthMap[mk].nets.reduce((ss,i)=>ss+(i.incl||0),0),0);
-  const grandTotalIncl = grandChibaIncl + grandNetsIncl;
-  const grandChibaExcl = sortedMonths.reduce((s,mk)=>s+monthMap[mk].chiba.reduce((ss,i)=>ss+(i.total_excl_tax||0),0),0);
-  const grandNetsExcl  = sortedMonths.reduce((s,mk)=>s+monthMap[mk].nets.reduce((ss,i)=>ss+(i.total_excl_tax||0),0),0);
-  const grandCount = sortedMonths.reduce((s,mk)=>s+monthMap[mk].all.length,0);
+  // 全期間合計
+  const grandExcl = data.reduce((s,i)=>s+(i.total_excl_tax||0),0);
+  const grandIncl = data.reduce((s,i)=>s+(i.incl||0),0);
+  const grandChibaExcl = data.filter(i=>i.company==="chiba").reduce((s,i)=>s+(i.total_excl_tax||0),0);
+  const grandNetsExcl  = data.filter(i=>i.company==="nets").reduce((s,i)=>s+(i.total_excl_tax||0),0);
 
-  el.innerHTML = `<div style="padding:4px 0">
-    <!-- 全期間合計ヘッダー -->
-    <div style="background:#111f38;border-bottom:2px solid #2a4070;padding:12px 14px;margin-bottom:2px">
-      <div style="font-size:10px;color:#5a7aa8;font-weight:700;letter-spacing:1px;margin-bottom:6px">全期間合計（${grandCount}枚）</div>
-      <div style="font-size:20px;font-weight:900;color:#f0c744;margin-bottom:6px;font-family:monospace">${fmt(grandTotalIncl)}<span style="font-size:11px;color:#5a7aa8">円（税込）</span></div>
-      <div style="display:flex;gap:10px">
-        <div style="flex:1">
-          <div style="font-size:9px;color:#f87171;margin-bottom:2px">🟥 千葉トヨタ ${sortedMonths.reduce((s,mk)=>s+monthMap[mk].chiba.length,0)}枚</div>
-          <div style="font-size:13px;font-weight:700;color:#fca5a5;font-family:monospace">${fmt(grandChibaExcl)}円<span style="font-size:10px;color:#5a7aa8"> 税込${fmt(grandChibaIncl)}</span></div>
-        </div>
-        <div style="flex:1">
-          <div style="font-size:9px;color:#60a5fa;margin-bottom:2px">🟦 ネッツトヨタ ${sortedMonths.reduce((s,mk)=>s+monthMap[mk].nets.length,0)}枚</div>
-          <div style="font-size:13px;font-weight:700;color:#93c5fd;font-family:monospace">${fmt(grandNetsExcl)}円<span style="font-size:10px;color:#5a7aa8"> 税込${fmt(grandNetsIncl)}</span></div>
-        </div>
+  el.innerHTML = `
+    <div style="background:#111f38;border-bottom:2px solid #2a4070;padding:12px 14px">
+      <div style="font-size:10px;color:#5a7aa8;font-weight:700;letter-spacing:1px;margin-bottom:4px">全期間合計 ${data.length}枚</div>
+      <div style="font-size:22px;font-weight:900;color:#f0c744;font-family:monospace;margin-bottom:6px">${fmt(grandIncl)}<span style="font-size:11px;color:#5a7aa8">円（税込）</span></div>
+      <div style="display:flex;gap:12px">
+        <div><span style="font-size:10px;color:#f87171">🟥千葉</span> <span style="font-size:12px;font-weight:700;color:#fca5a5;font-family:monospace">${fmt(grandChibaExcl)}円</span></div>
+        <div><span style="font-size:10px;color:#60a5fa">🟦ネッツ</span> <span style="font-size:12px;font-weight:700;color:#93c5fd;font-family:monospace">${fmt(grandNetsExcl)}円</span></div>
       </div>
     </div>
-    <!-- 月別リスト -->
-    ${sortedMonths.map((mk, idx) => {
-      const d = monthMap[mk];
-      const chibaExcl = d.chiba.reduce((s,i)=>s+(i.total_excl_tax||0),0);
-      const netsExcl  = d.nets.reduce((s,i)=>s+(i.total_excl_tax||0),0);
-      const chibaIncl = d.chiba.reduce((s,i)=>s+(i.incl||0),0);
-      const netsIncl  = d.nets.reduce((s,i)=>s+(i.incl||0),0);
-      const totalExcl = d.all.reduce((s,i)=>s+(i.total_excl_tax||0),0);
-      const totalIncl = d.all.reduce((s,i)=>s+(i.incl||0),0);
-      const [y,m] = mk.split("-");
-      const label = `${y}年${parseInt(m)}月`;
-      const days = new Set(d.all.map(i => getCdKey(i))).size;
+  ` + months.map((mk, idx) => {
+    const d = monthMap[mk];
+    const chibaExcl = d.chiba.reduce((s,i)=>s+(i.total_excl_tax||0),0);
+    const netsExcl  = d.nets.reduce((s,i)=>s+(i.total_excl_tax||0),0);
+    const totalExcl = d.all.reduce((s,i)=>s+(i.total_excl_tax||0),0);
+    const totalIncl = d.all.reduce((s,i)=>s+(i.incl||0),0);
+    const [y,m] = mk.split("-");
+    const days = new Set(d.all.map(i => getCdKey(i))).size;
 
-      let diffHtml = "";
-      const prevMk = sortedMonths[idx + 1];
-      if (prevMk) {
-        const prevIncl = monthMap[prevMk].all.reduce((s,i)=>s+(i.incl||0),0);
-        if (prevIncl > 0) {
-          const diff = Math.round((totalIncl - prevIncl) / prevIncl * 100);
-          const col = diff >= 0 ? "#4ade80" : "#f87171";
-          diffHtml = `<span style="font-size:10px;color:${col};font-weight:700">${diff>=0?"▲":"▼"}${Math.abs(diff)}%</span>`;
-        }
+    // 前月比
+    let diffHtml = "";
+    const prevMk = months[idx+1];
+    if (prevMk) {
+      const prevIncl = monthMap[prevMk].all.reduce((s,i)=>s+(i.incl||0),0);
+      if (prevIncl > 0) {
+        const diff = Math.round((totalIncl - prevIncl) / prevIncl * 100);
+        const col = diff >= 0 ? "#4ade80" : "#f87171";
+        diffHtml = `<span style="font-size:10px;color:${col};font-weight:700">${diff>=0?"▲":"▼"}${Math.abs(diff)}%</span>`;
       }
+    }
 
-      return `<div onclick="histMonthClick('${mk}')" style="border-bottom:1px solid #1e3050;padding:11px 14px;cursor:pointer;background:#0d1829">
-        <!-- 月ラベル + 合計 -->
-        <div style="display:flex;align-items:center;margin-bottom:7px">
-          <span style="font-size:15px;font-weight:800;color:#f0c744">${label}</span>
-          <span style="font-size:10px;color:#5a7aa8;margin-left:8px">${d.all.length}枚/${days}日</span>
-          <span style="margin-left:auto">${diffHtml}</span>
-          <span style="font-size:16px;font-weight:800;color:#e8edf5;margin-left:10px;font-family:monospace">${fmt(totalIncl)}<span style="font-size:10px;color:#5a7aa8">円</span></span>
-        </div>
-        <!-- 千葉・ネッツ内訳 -->
-        <div style="display:flex;gap:0">
-          <div style="flex:1;padding-right:10px;border-right:1px solid #1e3050">
-            <div style="font-size:9px;color:#f87171;margin-bottom:2px">🟥 千葉 ${d.chiba.length}枚</div>
-            <div style="font-size:12px;font-weight:700;color:#fca5a5;font-family:monospace">${fmt(chibaExcl)}<span style="font-size:9px;color:#5a7aa8"> 税込${fmt(chibaIncl)}</span></div>
-          </div>
-          <div style="flex:1;padding-left:10px">
-            <div style="font-size:9px;color:#60a5fa;margin-bottom:2px">🟦 ネッツ ${d.nets.length}枚</div>
-            <div style="font-size:12px;font-weight:700;color:#93c5fd;font-family:monospace">${fmt(netsExcl)}<span style="font-size:9px;color:#5a7aa8"> 税込${fmt(netsIncl)}</span></div>
-          </div>
-          <span style="font-size:14px;color:#3a5070;align-self:center;margin-left:8px">›</span>
-        </div>
-      </div>`;
-    }).join("")}
-  </div>`;
+    return `<div onclick="histMonthClick('${mk}')" style="padding:12px 14px;border-bottom:1px solid #1e3050;cursor:pointer">
+      <div style="display:flex;align-items:center;margin-bottom:6px">
+        <span style="font-size:15px;font-weight:800;color:#f0c744">${y}年${parseInt(m)}月</span>
+        <span style="font-size:10px;color:#5a7aa8;margin-left:8px">${d.all.length}枚 / ${days}日</span>
+        <span style="margin-left:auto;margin-right:6px">${diffHtml}</span>
+        <span style="font-size:15px;font-weight:800;color:#e8edf5;font-family:monospace">${fmt(totalIncl)}<span style="font-size:10px;color:#5a7aa8">円</span></span>
+        <span style="font-size:13px;color:#3a5070;margin-left:6px">›</span>
+      </div>
+      <div style="display:flex;gap:12px">
+        <div><span style="font-size:10px;color:#f87171">🟥千葉 ${d.chiba.length}枚</span> <span style="font-size:12px;font-weight:700;color:#fca5a5;font-family:monospace">${fmt(chibaExcl)}円</span></div>
+        <div><span style="font-size:10px;color:#60a5fa">🟦ネッツ ${d.nets.length}枚</span> <span style="font-size:12px;font-weight:700;color:#93c5fd;font-family:monospace">${fmt(netsExcl)}円</span></div>
+      </div>
+    </div>`;
+  }).join("");
 }
 
 function histMonthClick(mk) {
@@ -906,6 +853,7 @@ function histMonthClick(mk) {
   updateMonthNavLabel();
   switchHistTab("list");
 }
+
 
 
 // ── Camera ─────────────────────────────────────────────────────────────────
