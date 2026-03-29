@@ -177,7 +177,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v10</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v12</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -680,7 +680,7 @@ function switchCoTabCmp(co) {
 // ── 月送り・月戻しボタン ──────────────────────────────────────────────────
 function moveMonthNav(delta) {
   const allMonths = [...new Set(history.map(item => {
-    const mk = item.billing_month || getCdKey(item).slice(0,7);
+    const mk = item.billing_month || (item.collection_date ? item.collection_date.slice(0,7) : new Date(item.real_scanned_at||item.scanned_at).toISOString().slice(0,7));
     return mk;
   }))].sort((a,b) => a.localeCompare(b));
 
@@ -724,24 +724,31 @@ function updateMonthNavLabel() {
   }
 }
 
-// getCdKey は既存関数を使用
+// 集計日キーを返すグローバル関数
+function getCdKey(item) {
+  if (item.collection_date) return item.collection_date;
+  const d = new Date(item.real_scanned_at || item.scanned_at);
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+
 function getItemMonthKey(item) {
-  return item.billing_month || getCdKey(item).slice(0,7);
+  if (item.billing_month) return item.billing_month;
+  if (item.collection_date) return item.collection_date.slice(0,7);
+  const d = new Date(item.real_scanned_at || item.scanned_at);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
 }
 
 // ── 日別比較（モバイル版）────────────────────────────────────────────────
 function renderHistDayComparison() {
-  try {
   const el = document.getElementById("hist-view-day");
-  if (!el) { console.error("hist-view-day not found"); return; }
+  if (!el) return;
   const data = history.slice();
-  console.log("DAY COMPARISON: data length =", data.length, "el =", el);
   const wkdays = ["日","月","火","水","木","金","土"];
 
   // 日別グループ化
   const dayMap = {};
   data.forEach(item => {
-    const dk = getCdKey(item);
+    const dk = cdKey(item);
     if (!dayMap[dk]) dayMap[dk] = {chiba:[], nets:[], all:[]};
     dayMap[dk].all.push(item);
     if (item.company === "chiba") dayMap[dk].chiba.push(item);
@@ -755,7 +762,6 @@ function renderHistDayComparison() {
   }
 
   el.innerHTML = days.map(dk => {
-    try {
     const d = dayMap[dk];
     const chibaExcl = d.chiba.reduce((s,i)=>s+(i.total_excl_tax||0),0);
     const netsExcl  = d.nets.reduce((s,i)=>s+(i.total_excl_tax||0),0);
@@ -780,9 +786,7 @@ function renderHistDayComparison() {
       </div>
       <span style="font-size:13px;color:#3a5070;margin-left:4px">›</span>
     </div>`;
-    } catch(e) { console.error("DAY ROW ERROR:", e); return `<div style="color:red">${e.message}</div>`; }
   }).join("");
-  } catch(e) { console.error("DAY COMP ERROR:", e); document.getElementById("hist-view-day").innerHTML = `<div style="padding:20px;color:#f87171;font-size:13px">エラー: ${e.message}</div>`; }
 }
 
 function histDayClick(dk) {
@@ -793,11 +797,13 @@ function histDayClick(dk) {
 function renderHistMonthComparison() {
   const el = document.getElementById("hist-view-month");
   const data = history.slice();
+  const cdKey = item => item.collection_date || (()=>{const d=new Date(item.real_scanned_at||item.scanned_at);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");})();
 
   // 月別グループ化
+  const getMonthKey = item => item.billing_month || cdKey(item).slice(0,7);
   const monthMap = {};
   data.forEach(item => {
-    const mk = getItemMonthKey(item);
+    const mk = getMonthKey(item);
     if (!monthMap[mk]) monthMap[mk] = {chiba:[], nets:[], all:[]};
     monthMap[mk].all.push(item);
     if (item.company === "chiba") monthMap[mk].chiba.push(item);
@@ -832,7 +838,7 @@ function renderHistMonthComparison() {
     const totalExcl = d.all.reduce((s,i)=>s+(i.total_excl_tax||0),0);
     const totalIncl = d.all.reduce((s,i)=>s+(i.incl||0),0);
     const [y,m] = mk.split("-");
-    const days = new Set(d.all.map(i => getCdKey(i))).size;
+    const days = new Set(d.all.map(i => cdKey(i))).size;
 
     // 前月比
     let diffHtml = "";
