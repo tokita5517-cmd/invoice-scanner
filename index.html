@@ -177,7 +177,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v9</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v10</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -731,8 +731,11 @@ function getItemMonthKey(item) {
 
 // ── 日別比較（モバイル版）────────────────────────────────────────────────
 function renderHistDayComparison() {
+  try {
   const el = document.getElementById("hist-view-day");
+  if (!el) { console.error("hist-view-day not found"); return; }
   const data = history.slice();
+  console.log("DAY COMPARISON: data length =", data.length, "el =", el);
   const wkdays = ["日","月","火","水","木","金","土"];
 
   // 日別グループ化
@@ -752,6 +755,7 @@ function renderHistDayComparison() {
   }
 
   el.innerHTML = days.map(dk => {
+    try {
     const d = dayMap[dk];
     const chibaExcl = d.chiba.reduce((s,i)=>s+(i.total_excl_tax||0),0);
     const netsExcl  = d.nets.reduce((s,i)=>s+(i.total_excl_tax||0),0);
@@ -776,7 +780,9 @@ function renderHistDayComparison() {
       </div>
       <span style="font-size:13px;color:#3a5070;margin-left:4px">›</span>
     </div>`;
+    } catch(e) { console.error("DAY ROW ERROR:", e); return `<div style="color:red">${e.message}</div>`; }
   }).join("");
+  } catch(e) { console.error("DAY COMP ERROR:", e); document.getElementById("hist-view-day").innerHTML = `<div style="padding:20px;color:#f87171;font-size:13px">エラー: ${e.message}</div>`; }
 }
 
 function histDayClick(dk) {
