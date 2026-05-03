@@ -177,7 +177,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v14</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v16</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -1131,6 +1131,7 @@ function showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNu
   }
 
   const now = realScanTime || new Date();
+  // OCRで日付が取れた場合はそれを使い、なければ今日をデフォルトに
   currentCollectionDate = issueDate || now;
   initDrum(currentCollectionDate, issueDateOCR);
 
@@ -1170,7 +1171,7 @@ function showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNu
 function buildMonthList() {
   const now = new Date();
   const list = [];
-  for (let i = -4; i <= 4; i++) {
+  for (let i = -6; i <= 6; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
     list.push({year: d.getFullYear(), month: d.getMonth()+1});
   }
@@ -1242,7 +1243,10 @@ function setupDrumTouch(elId, itemCount, startIdx, onChange) {
   let startOffset = -startIdx * ITEM_H;
   let curOffset = startOffset;
 
-  function clamp(idx) { return Math.max(0, Math.min(itemCount-1, idx)); }
+  // 循環インデックス（0〜itemCount-1 を折り返す）
+  function wrapIdx(idx) {
+    return ((idx % itemCount) + itemCount) % itemCount;
+  }
 
   function applyOffset(offset, animate) {
     inner.style.transition = animate ? "transform 0.2s" : "none";
@@ -1263,14 +1267,15 @@ function setupDrumTouch(elId, itemCount, startIdx, onChange) {
 
   function onMove(y) {
     const diff = y - startY;
-    const newOffset = startOffset + diff;
-    const minOffset = -(itemCount-1)*ITEM_H;
-    curOffset = Math.max(minOffset, Math.min(0, newOffset));
+    // 折り返しなし（自由にスクロール）
+    curOffset = startOffset + diff;
     applyOffset(curOffset, false);
   }
 
   function onEnd() {
-    curIdx = clamp(Math.round(-curOffset / ITEM_H));
+    // どこまでスクロールしても循環インデックスに変換
+    const rawIdx = Math.round(-curOffset / ITEM_H);
+    curIdx = wrapIdx(rawIdx);
     curOffset = -curIdx * ITEM_H;
     applyOffset(curOffset, true);
     updateActive(curIdx);
