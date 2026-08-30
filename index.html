@@ -177,7 +177,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v22</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v23</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -656,23 +656,51 @@ async function loadAllHistory() {
 
 // 月別ドキュメントに分割保存
 async function saveHistory(allItems) {
-  // 月別にグループ化
-  const monthGroups = {};
-  allItems.forEach(item => {
-    const key = getMonthDocKey(item);
-    if (!monthGroups[key]) monthGroups[key] = [];
-    monthGroups[key].push(item);
-  });
-  
-  const docKeys = Object.keys(monthGroups);
-  
-  // 各月ドキュメントを保存
-  await Promise.all(docKeys.map(key => fsSet(key, monthGroups[key])));
-  
-  // インデックス更新（既存のキー + 新しいキー）
-  const existingIndex = (await fsGet("history_index")) || [];
-  const allKeys = [...new Set([...existingIndex, ...docKeys])].sort();
-  await fsSet("history_index", allKeys);
+  try {
+    const monthGroups = {};
+    allItems.forEach(item => {
+      const key = getMonthDocKey(item);
+      if (!monthGroups[key]) monthGroups[key] = [];
+      monthGroups[key].push(item);
+    });
+    const docKeys = Object.keys(monthGroups);
+    await Promise.all(docKeys.map(key => fsSet(key, monthGroups[key])));
+    const existingIndex = (await fsGet("history_index")) || [];
+    const allKeys = [...new Set([...existingIndex, ...docKeys])].sort();
+    await fsSet("history_index", allKeys);
+    return true; // 成功
+  } catch(e) {
+    console.error("saveHistory error:", e);
+    showSaveError(e.message);
+    return false; // 失敗
+  }
+}
+
+function showSaveError(msg) {
+  // 画面中央に大きく赤いエラーを表示
+  const el = document.createElement("div");
+  el.id = "save-error-banner";
+  el.style.cssText = [
+    "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);",
+    "display:flex;flex-direction:column;align-items:center;justify-content:center;",
+    "padding:24px;text-align:center;"
+  ].join("");
+  el.innerHTML = `
+    <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+    <div style="font-size:20px;font-weight:900;color:#f87171;margin-bottom:12px">保存に失敗しました</div>
+    <div style="font-size:14px;color:#fca5a5;margin-bottom:8px">Firestoreへの書き込みエラー</div>
+    <div style="font-size:11px;color:#7a9cc8;background:#111f38;border-radius:8px;padding:8px 14px;margin-bottom:20px;max-width:320px;word-break:break-all">${msg}</div>
+    <div style="font-size:13px;color:#e8edf5;margin-bottom:20px;line-height:1.7">
+      ⚠️ このデータはまだ保存されていません<br>
+      スクリーンショットを撮ってから<br>
+      再度お試しください
+    </div>
+    <button onclick="document.getElementById('save-error-banner').remove()" 
+      style="background:#ef4444;border:none;border-radius:12px;padding:14px 32px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit">
+      閉じる
+    </button>
+  `;
+  document.body.appendChild(el);
 }
 
 // 旧データ（inv_history）を月別に移行
@@ -1556,10 +1584,16 @@ function confirmAndSave() {
   saveEntry(entry);
 }
 
-function saveEntry(entry) {
+async function saveEntry(entry) {
   history.unshift(entry);
   window._appHistory = history;
-  saveHistory(history);
+  const ok = await saveHistory(history);
+  if (!ok) {
+    // 保存失敗 → historyから取り除く（表示だけで保存されてない状態を防ぐ）
+    history.shift();
+    window._appHistory = history;
+    return;
+  }
   document.getElementById("input-form").style.display = "none";
   document.getElementById("preview-wrap").style.display = "none";
   document.getElementById("res-slip").textContent  = entry.slip_number;
