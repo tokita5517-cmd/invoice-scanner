@@ -11,7 +11,7 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+  import { getFirestore, doc, getDoc, setDoc, getDocFromServer } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCiaFRWD0fWXiK0zXAqZqRPElhlHLvwgXw",
@@ -27,6 +27,7 @@
 
   window._fsDoc = doc;
   window._fsGetDoc = getDoc;
+  window._fsGetDocFromServer = getDocFromServer;
   window._fsSetDoc = setDoc;
   window._firestore = firestore;
   window._firebaseReady = true;
@@ -177,7 +178,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v32</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v33</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -574,6 +575,17 @@ async function fsGet(key) {
     return d.exists() ? d.data().value : null;
   } catch(e) { console.error("fsGet error", e); return null; }
 }
+// キャッシュを無視してサーバーから直接読む（起動時用）
+async function fsGetServer(key) {
+  try {
+    const d = await window._fsGetDocFromServer(window._fsDoc(window._firestore, "scanner", key));
+    return d.exists() ? d.data().value : null;
+  } catch(e) {
+    // サーバー読み取り失敗時はキャッシュにフォールバック
+    console.warn("fsGetServer fallback to cache for:", key, e.message);
+    return fsGet(key);
+  }
+}
 async function fsSet(key, value) {
   try {
     await window._fsSetDoc(window._fsDoc(window._firestore, "scanner", key), { value });
@@ -612,11 +624,13 @@ async function scanAllHistoryDocKeys() {
 }
 
 async function loadAllHistory() {
-  // 最大3回リトライ
+  // 最大3回リトライ・サーバーから直接読む（キャッシュ無視）
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
+      const readFn = attempt === 1 ? fsGetServer : fsGet; // 初回はサーバー直読み
+
       const [indexDoc, scannedKeys] = await Promise.all([
-        fsGet("history_index"),
+        readFn("history_index"),
         scanAllHistoryDocKeys()
       ]);
 
@@ -625,27 +639,26 @@ async function loadAllHistory() {
 
       if (allKeys.length === 0) {
         // 月別ドキュメントが見つからない場合のみinv_historyを使用
-        const legacy = await fsGet("inv_history");
+        const legacy = await readFn("inv_history");
         if (Array.isArray(legacy) && legacy.length > 0) {
           await saveHistory(legacy);
           showToastMsg("✅ データを月別分割に移行しました（" + legacy.length + "件）");
           return legacy.sort((a,b) => new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at));
         }
         if (attempt < 3) {
-          await new Promise(r => setTimeout(r, 1000)); // 1秒待ってリトライ
+          await new Promise(r => setTimeout(r, 2000));
           continue;
         }
         return [];
       }
 
-      // 月別ドキュメントから全データ取得
-      const results = await Promise.all(allKeys.map(key => fsGet(key).catch(() => null)));
+      // 月別ドキュメントからサーバー直読み
+      const results = await Promise.all(allKeys.map(key => readFn(key).catch(() => fsGet(key))));
       const all = [];
       results.forEach(r => { if (Array.isArray(r)) all.push(...r); });
 
       if (all.length === 0 && attempt < 3) {
-        // キーは見つかったがデータが0件 → リトライ
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 2000));
         continue;
       }
 
@@ -658,7 +671,7 @@ async function loadAllHistory() {
 
     } catch(e) {
       console.error(`loadAllHistory attempt ${attempt} failed:`, e);
-      if (attempt < 3) await new Promise(r => setTimeout(r, 1000));
+      if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
     }
   }
   return [];
