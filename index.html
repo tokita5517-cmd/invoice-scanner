@@ -11,7 +11,7 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc, getDocFromServer } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+  import { getFirestore, doc, getDoc, setDoc, getDocFromServer, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCiaFRWD0fWXiK0zXAqZqRPElhlHLvwgXw",
@@ -29,6 +29,8 @@
   window._fsGetDoc = getDoc;
   window._fsGetDocFromServer = getDocFromServer;
   window._fsSetDoc = setDoc;
+  window._fsCollection = collection;
+  window._fsGetDocs = getDocs;
   window._firestore = firestore;
   window._firebaseReady = true;
   window.dispatchEvent(new Event("firebaseReady"));
@@ -178,7 +180,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v33</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v34</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -601,30 +603,25 @@ function getMonthDocKey(item) {
   return "history_" + mk.replace("-","_");
 }
 
-// ── 月別シャーディング ────────────────────────────────────────────────────────
-function getMonthDocKey(item) {
-  const mk = item.billing_month || item.collection_date?.slice(0,7) || (() => {
-    const d = new Date(item.real_scanned_at || item.scanned_at);
-    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
-  })();
-  return "history_" + mk.replace("-","_");
+// Firestoreの全history_*ドキュメントキーを取得
+// 候補名を40個推測してgetDocするのではなく、コレクションを1回で一覧する
+async function scanAllHistoryDocKeys() {
+  try {
+    const snap = await window._fsGetDocs(
+      window._fsCollection(window._firestore, "scanner")
+    );
+    return snap.docs.map(d => d.id).filter(id => id.startsWith("history_") && id !== "history_index");
+  } catch(e) {
+    console.error("scanAllHistoryDocKeys error:", e);
+    return null; // ★失敗は null。空配列（＝本当に0件）と区別する
+  }
 }
 
-// Firestoreの全history_*ドキュメントキーをスキャンして取得（インデックス修復用）
-async function scanAllHistoryDocKeys() {
-  const now = new Date();
-  const candidates = [];
-  for (let i = -36; i <= 3; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const key = "history_" + d.getFullYear() + "_" + String(d.getMonth()+1).padStart(2,"0");
-    candidates.push(key);
-  }
-  const results = await Promise.all(candidates.map(k => fsGet(k).then(v => v ? k : null).catch(() => null)));
-  return results.filter(Boolean);
-}
+// ★読み込みが成功したかどうかのフラグ。false のあいだは絶対に書き込まない
+let historyLoaded = false;
 
 async function loadAllHistory() {
-  // 最大3回リトライ・サーバーから直接読む（キャッシュ無視）
+  // 最大3回リトライ
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const readFn = attempt === 1 ? fsGetServer : fsGet; // 初回はサーバー直読み
@@ -634,29 +631,36 @@ async function loadAllHistory() {
         scanAllHistoryDocKeys()
       ]);
 
+      // コレクション一覧に失敗 → 通信の問題。0件とみなさずリトライ
+      if (scannedKeys === null) {
+        if (attempt < 3) { await new Promise(r => setTimeout(r, 2000)); continue; }
+        throw new Error("Firestoreのコレクション一覧に失敗しました");
+      }
+
       const indexKeys = (Array.isArray(indexDoc) ? indexDoc : []);
       const allKeys = [...new Set([...indexKeys, ...scannedKeys])].sort();
 
       if (allKeys.length === 0) {
-        // 月別ドキュメントが見つからない場合のみinv_historyを使用
+        // 月別ドキュメントが本当に存在しない場合のみ、旧inv_historyから移行
         const legacy = await readFn("inv_history");
         if (Array.isArray(legacy) && legacy.length > 0) {
-          await saveHistory(legacy);
+          historyLoaded = true;
+          const sorted = legacy.sort((a,b) => new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at));
+          await saveHistory(sorted);
           showToastMsg("✅ データを月別分割に移行しました（" + legacy.length + "件）");
-          return legacy.sort((a,b) => new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at));
+          return sorted;
         }
-        if (attempt < 3) {
-          await new Promise(r => setTimeout(r, 2000));
-          continue;
-        }
+        // 月別も旧データも無い＝正真正銘の初回起動
+        historyLoaded = true;
         return [];
       }
 
-      // 月別ドキュメントからサーバー直読み
+      // 月別ドキュメントを読む
       const results = await Promise.all(allKeys.map(key => readFn(key).catch(() => fsGet(key))));
       const all = [];
       results.forEach(r => { if (Array.isArray(r)) all.push(...r); });
 
+      // キーはあるのに中身が0件 → 読み取り失敗の可能性。リトライ
       if (all.length === 0 && attempt < 3) {
         await new Promise(r => setTimeout(r, 2000));
         continue;
@@ -667,6 +671,7 @@ async function loadAllHistory() {
         await fsSet("history_index", allKeys);
       }
 
+      historyLoaded = true;
       return all.sort((a,b) => new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at));
 
     } catch(e) {
@@ -674,7 +679,18 @@ async function loadAllHistory() {
       if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
     }
   }
+  // 3回とも失敗 → historyLoaded は false のまま（書き込み禁止状態）
   return [];
+}
+
+// 読み込み失敗を利用者に知らせる（この状態でスキャンさせない）
+function showLoadError() {
+  const el = document.createElement("div");
+  el.id = "load-error-banner";
+  el.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:9998;background:#b91c1c;color:#fff;padding:12px 16px;font-size:13px;font-weight:700;text-align:center;line-height:1.6";
+  el.innerHTML = "⚠️ データの読み込みに失敗しました<br>"
+    + "<span style='font-weight:500;font-size:12px'>データ保護のため保存を停止しています。通信を確認してアプリを再起動してください。</span>";
+  document.body.appendChild(el);
 }
 
 function showToastMsg(msg) {
@@ -687,6 +703,12 @@ function showToastMsg(msg) {
 
 // 月別ドキュメントに分割保存
 async function saveHistory(allItems) {
+  // ★読み込みが成功していない状態では絶対に書き込まない
+  // （0件のまま保存すると、その月の実データが空で上書きされてしまう）
+  if (!historyLoaded) {
+    showSaveError("データ未読み込みのため保存を中止しました。アプリを再起動してください。");
+    return false;
+  }
   try {
     const monthGroups = {};
     allItems.forEach(item => {
@@ -777,9 +799,14 @@ async function init() {
   if (!window._firebaseReady) {
     await new Promise(resolve => window.addEventListener("firebaseReady", resolve, {once:true}));
   }
-  history = (await fsGet("inv_history")) || [];
+  // ★月別シャーディング対応の読み込みを使う（旧 inv_history 直読みではない）
+  history = await loadAllHistory();
   window._appHistory = history;
-  if (history.length === 0) {
+
+  if (!historyLoaded) {
+    // 読み込み失敗。0件表示のまま保存させない
+    showLoadError();
+  } else if (history.length === 0) {
     const idbData = await idbGet("inv_history");
     if (idbData && idbData.length > 0) {
       history = idbData;
