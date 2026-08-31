@@ -11,7 +11,7 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc, getDocFromServer, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+  import { getFirestore, doc, getDoc, setDoc, getDocFromServer, collection, getDocs, getDocsFromServer } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCiaFRWD0fWXiK0zXAqZqRPElhlHLvwgXw",
@@ -31,6 +31,7 @@
   window._fsSetDoc = setDoc;
   window._fsCollection = collection;
   window._fsGetDocs = getDocs;
+  window._fsGetDocsFromServer = getDocsFromServer;
   window._firestore = firestore;
   window._firebaseReady = true;
   window.dispatchEvent(new Event("firebaseReady"));
@@ -180,7 +181,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v34</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v35</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -604,25 +605,36 @@ function getMonthDocKey(item) {
 }
 
 // Firestoreの全history_*ドキュメントキーを取得
-// 候補名を40個推測してgetDocするのではなく、コレクションを1回で一覧する
+// ★必ずサーバーから読む。ローカルキャッシュ由来の結果は「0件」として信用しない
 async function scanAllHistoryDocKeys() {
+  const col = window._fsCollection(window._firestore, "scanner");
   try {
-    const snap = await window._fsGetDocs(
-      window._fsCollection(window._firestore, "scanner")
-    );
+    const snap = await window._fsGetDocsFromServer(col);
     return snap.docs.map(d => d.id).filter(id => id.startsWith("history_") && id !== "history_index");
   } catch(e) {
-    console.error("scanAllHistoryDocKeys error:", e);
-    return null; // ★失敗は null。空配列（＝本当に0件）と区別する
+    console.warn("getDocsFromServer失敗、通常読みを試行:", e.message);
+    try {
+      const snap = await window._fsGetDocs(col);
+      // キャッシュ由来なら信用できない（起動直後の空キャッシュ対策）
+      if (snap.metadata && snap.metadata.fromCache) {
+        console.warn("キャッシュ由来のため無効扱い");
+        return null;
+      }
+      return snap.docs.map(d => d.id).filter(id => id.startsWith("history_") && id !== "history_index");
+    } catch(e2) {
+      console.error("scanAllHistoryDocKeys error:", e2);
+      return null; // ★失敗は null。空配列（＝本当に0件）と区別する
+    }
   }
 }
 
 // ★読み込みが成功したかどうかのフラグ。false のあいだは絶対に書き込まない
 let historyLoaded = false;
 
+const MAX_ATTEMPTS = 5;
+
 async function loadAllHistory() {
-  // 最大3回リトライ
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       const readFn = attempt === 1 ? fsGetServer : fsGet; // 初回はサーバー直読み
 
@@ -633,8 +645,8 @@ async function loadAllHistory() {
 
       // コレクション一覧に失敗 → 通信の問題。0件とみなさずリトライ
       if (scannedKeys === null) {
-        if (attempt < 3) { await new Promise(r => setTimeout(r, 2000)); continue; }
-        throw new Error("Firestoreのコレクション一覧に失敗しました");
+        if (attempt < MAX_ATTEMPTS) { await new Promise(r => setTimeout(r, 1500 * attempt)); continue; }
+        break; // historyLoaded は false のまま
       }
 
       const indexKeys = (Array.isArray(indexDoc) ? indexDoc : []);
@@ -650,7 +662,11 @@ async function loadAllHistory() {
           showToastMsg("✅ データを月別分割に移行しました（" + legacy.length + "件）");
           return sorted;
         }
-        // 月別も旧データも無い＝正真正銘の初回起動
+        // ★0件は即断しない。最後の試行まで待ってから初回起動と判定する
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, 1500 * attempt));
+          continue;
+        }
         historyLoaded = true;
         return [];
       }
@@ -660,10 +676,13 @@ async function loadAllHistory() {
       const all = [];
       results.forEach(r => { if (Array.isArray(r)) all.push(...r); });
 
-      // キーはあるのに中身が0件 → 読み取り失敗の可能性。リトライ
-      if (all.length === 0 && attempt < 3) {
-        await new Promise(r => setTimeout(r, 2000));
-        continue;
+      // キーはあるのに中身が0件 → 読み取り失敗。絶対に「0件」として確定させない
+      if (all.length === 0) {
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, 1500 * attempt));
+          continue;
+        }
+        break; // historyLoaded は false のまま → 保存禁止＋警告表示
       }
 
       // インデックスに不足があれば修復
@@ -676,11 +695,24 @@ async function loadAllHistory() {
 
     } catch(e) {
       console.error(`loadAllHistory attempt ${attempt} failed:`, e);
-      if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
+      if (attempt < MAX_ATTEMPTS) await new Promise(r => setTimeout(r, 1500 * attempt));
     }
   }
-  // 3回とも失敗 → historyLoaded は false のまま（書き込み禁止状態）
+  // 全試行失敗 → historyLoaded は false のまま（書き込み禁止状態）
   return [];
+}
+
+function showLoadingBar() {
+  if (document.getElementById("load-bar")) return;
+  const el = document.createElement("div");
+  el.id = "load-bar";
+  el.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:9997;background:#1d4ed8;color:#fff;padding:9px 16px;font-size:13px;font-weight:700;text-align:center";
+  el.textContent = "☁️ クラウドからデータを読み込み中…";
+  document.body.appendChild(el);
+}
+function hideLoadingBar() {
+  const el = document.getElementById("load-bar");
+  if (el) el.remove();
 }
 
 // 読み込み失敗を利用者に知らせる（この状態でスキャンさせない）
@@ -799,9 +831,13 @@ async function init() {
   if (!window._firebaseReady) {
     await new Promise(resolve => window.addEventListener("firebaseReady", resolve, {once:true}));
   }
+  // ★読み込み中は「0枚」を出さない（誤解と誤操作を防ぐ）
+  showLoadingBar();
+
   // ★月別シャーディング対応の読み込みを使う（旧 inv_history 直読みではない）
   history = await loadAllHistory();
   window._appHistory = history;
+  hideLoadingBar();
 
   if (!historyLoaded) {
     // 読み込み失敗。0件表示のまま保存させない
