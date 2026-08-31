@@ -177,7 +177,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v25</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v26</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -601,38 +601,45 @@ async function scanAllHistoryDocKeys() {
 }
 
 async function loadAllHistory() {
-  // 常に全ドキュメントをスキャンしてインデックスと照合
-  const [indexDoc, scannedKeys] = await Promise.all([
+  // 1. インデックス + スキャンで全月ドキュメントを取得
+  const [indexDoc, scannedKeys, legacy] = await Promise.all([
     fsGet("history_index"),
-    scanAllHistoryDocKeys()
+    scanAllHistoryDocKeys(),
+    fsGet("inv_history")  // 旧データも常に確認
   ]);
 
   const indexKeys = (Array.isArray(indexDoc) ? indexDoc : []);
-  // インデックスにないキーを検出
   const allKeys = [...new Set([...indexKeys, ...scannedKeys])].sort();
 
-  // インデックスに不足があれば自動修復
-  if (scannedKeys.some(k => !indexKeys.includes(k))) {
-    console.log("インデックス修復:", scannedKeys.filter(k => !indexKeys.includes(k)));
-    await fsSet("history_index", allKeys);
-    showToastMsg("✅ インデックスを修復しました");
-  }
-
+  // 月別ドキュメントから全データ取得
+  let all = [];
   if (allKeys.length > 0) {
     const results = await Promise.all(allKeys.map(key => fsGet(key).catch(() => null)));
-    const all = [];
     results.forEach(r => { if (Array.isArray(r)) all.push(...r); });
-    return all.sort((a,b) => new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at));
   }
 
-  // 旧データ（inv_history）があれば移行
-  const legacy = await fsGet("inv_history");
-  if (legacy && Array.isArray(legacy) && legacy.length > 0) {
-    await saveHistory(legacy);
-    showToastMsg("✅ データを月別分割に移行しました（" + legacy.length + "件）");
-    return legacy.sort((a,b) => new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at));
+  // 2. 旧inv_historyにまだ残っているデータをマージ（IDで重複除去）
+  if (Array.isArray(legacy) && legacy.length > 0) {
+    const existingIds = new Set(all.map(i => i.id));
+    const orphans = legacy.filter(i => !existingIds.has(i.id));
+    if (orphans.length > 0) {
+      console.log("旧inv_historyに未移行データ発見:", orphans.length, "件 → 移行します");
+      all.push(...orphans);
+      // 未移行分を月別ドキュメントに保存
+      await saveHistory(all);
+      showToastMsg("✅ 未移行データ " + orphans.length + "件 を取り込みました");
+    }
   }
-  return [];
+
+  // 3. インデックスに不足があれば修復
+  const actualKeys = [...new Set(all.map(item => getMonthDocKey(item)))];
+  const missingKeys = actualKeys.filter(k => !allKeys.includes(k));
+  if (missingKeys.length > 0 || scannedKeys.some(k => !indexKeys.includes(k))) {
+    const fixedIndex = [...new Set([...allKeys, ...actualKeys])].sort();
+    await fsSet("history_index", fixedIndex);
+  }
+
+  return all.sort((a,b) => new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at));
 }
 
 function showToastMsg(msg) {
