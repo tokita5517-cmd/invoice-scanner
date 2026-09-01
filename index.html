@@ -206,7 +206,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v42</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v43</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -435,15 +435,24 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
         <span style="font-size:13px;color:#4ade80;font-weight:700">Firestore 接続済み・共有有効</span>
       </div>
       <div style="font-size:11px;color:#5a7aa8;line-height:1.6;margin-bottom:12px">同じURLを開けば誰でも同じデータを見ることができます。<br>データは自動でクラウドに保存されます。</div>
-      <button onclick="forceRebuildData()" style="width:100%;padding:12px;background:rgba(240,199,68,0.1);border:1px solid rgba(240,199,68,0.4);border-radius:10px;color:#f0c744;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
+      <button id="rebuild-btn" onclick="forceRebuildData()" style="width:100%;padding:12px;background:rgba(240,199,68,0.1);border:1px solid rgba(240,199,68,0.4);border-radius:10px;color:#f0c744;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
         🔄 データ全件再構築（枚数がズレている場合）
       </button>
+      <div id="ro-card" style="background:#0d1829;border:1px solid #2a4070;border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div>
+            <div style="font-size:13px;font-weight:800;color:#e8edf5">👁 閲覧専用モード</div>
+            <div style="font-size:10px;color:#5a7aa8;margin-top:3px;line-height:1.6">この端末から一切書き込みません。<br>確認用の端末で有効にしてください。</div>
+          </div>
+          <button id="ro-toggle" onclick="toggleReadOnly()" style="flex-shrink:0;border:none;border-radius:20px;padding:9px 18px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">—</button>
+        </div>
+      </div>
       <button class="btn-sec" style="width:100%;padding:14px;margin-bottom:8px" onclick="renderLogPanel()">
         📜 動作ログを見る
       </button>
       <div id="log-panel" style="display:none;margin-bottom:8px"></div>
       <div id="rebuild-status" style="font-size:11px;color:#5a7aa8;margin-top:6px;text-align:center"></div>
-      <button onclick="deleteInvHistory()" style="width:100%;padding:10px;margin-top:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;color:#f87171;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
+      <button id="delinv-btn" onclick="deleteInvHistory()" style="width:100%;padding:10px;margin-top:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;color:#f87171;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
         🗑 旧データ(inv_history)を削除して修正
       </button>
       <button onclick="debugKeys()" style="width:100%;padding:10px;margin-top:8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);border-radius:10px;color:#60a5fa;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
@@ -619,7 +628,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v42";
+const APP_VERSION = "v43";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -775,6 +784,59 @@ function showCountDropWarning(before, now) {
   document.body.appendChild(el);
 }
 
+// ── 閲覧専用モード ──────────────────────────────────────────────────────────
+// 書き込みを一切させない。古い画面がデータを巻き戻す事故を根本から防ぐ。
+let readOnly = false;
+
+function loadReadOnly() {
+  try { readOnly = localStorage.getItem("read_only") === "1"; } catch(e) { readOnly = false; }
+}
+
+function toggleReadOnly() {
+  readOnly = !readOnly;
+  try { localStorage.setItem("read_only", readOnly ? "1" : "0"); } catch(e) {}
+  applyReadOnly();
+  logEvent("MODE", readOnly ? "閲覧専用モードに変更" : "編集モードに変更");
+  showToastMsg(readOnly ? "👁 閲覧専用モードにしました" : "✏️ 編集モードにしました");
+}
+
+function applyReadOnly() {
+  const badge = document.getElementById("ro-badge");
+  if (badge) badge.style.display = readOnly ? "inline-block" : "none";
+
+  const btn = document.getElementById("ro-toggle");
+  if (btn) {
+    btn.textContent = readOnly ? "ON" : "OFF";
+    btn.style.background = readOnly ? "#f0c744" : "#1e3050";
+    btn.style.color      = readOnly ? "#0a1424" : "#7a9cc8";
+  }
+  const card = document.getElementById("ro-card");
+  if (card) card.style.borderColor = readOnly ? "#f0c744" : "#2a4070";
+
+  // スキャン開始ボタンを塞ぐ
+  const scanBtn = document.getElementById("btn-scan");
+  if (scanBtn) {
+    scanBtn.style.opacity = readOnly ? "0.35" : "1";
+    scanBtn.style.pointerEvents = readOnly ? "none" : "auto";
+  }
+  // 危険な操作ボタンを塞ぐ
+  ["rebuild-btn","delinv-btn"].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) {
+      b.style.opacity = readOnly ? "0.35" : "1";
+      b.style.pointerEvents = readOnly ? "none" : "auto";
+    }
+  });
+  renderHistory(); // 編集・削除ボタンの表示を切り替える
+}
+
+// 書き込み系の入口すべてで呼ぶ門番
+function blockIfReadOnly() {
+  if (!readOnly) return false;
+  showToastMsg("👁 閲覧専用モードのため変更できません");
+  return true;
+}
+
 function showLoadingBar() {
   if (document.getElementById("load-bar")) return;
   const el = document.createElement("div");
@@ -808,6 +870,11 @@ function showToastMsg(msg) {
 
 // 月別ドキュメントに分割保存
 async function saveHistory(allItems) {
+  // ★閲覧専用モードでは何があっても書き込まない（最後の砦）
+  if (readOnly) {
+    console.warn("閲覧専用モードのため保存をスキップしました");
+    return false;
+  }
   // ★読み込みが成功していない状態では絶対に書き込まない
   // （0件のまま保存すると、その月の実データが空で上書きされてしまう）
   if (!historyLoaded) {
@@ -992,6 +1059,7 @@ async function bootSequence() {
   if (!window._firebaseReady) {
     await new Promise(resolve => window.addEventListener("firebaseReady", resolve, {once:true}));
   }
+  loadReadOnly();
   // ★読み込み中は「0枚」を出さない（誤解と誤操作を防ぐ）
   showLoadingBar();
 
@@ -1000,7 +1068,7 @@ async function bootSequence() {
   window._appHistory = history;
   hideLoadingBar();
 
-  logEvent("STARTUP", `読込 ${history.length}件 / loaded=${historyLoaded}`);
+  logEvent("STARTUP", `読込 ${history.length}件 / loaded=${historyLoaded}${readOnly ? " / 閲覧専用" : ""}`);
 
   if (!historyLoaded) {
     // 読み込み失敗。0件表示のまま保存させない
@@ -1035,6 +1103,7 @@ async function bootSequence() {
   updateRecentBar();
   renderHistory();
   updateStats();
+  applyReadOnly();
 }
 
 function showMigrateNotice(count) {
@@ -1305,6 +1374,7 @@ function histMonthClick(mk) {
 // 全データを全ソースから読み込んで月別ドキュメントを完全再構築
 // 旧inv_historyを空配列で上書きして無効化
 async function deleteInvHistory() {
+  if (blockIfReadOnly()) return;
   if (!confirm("旧データ(inv_history)を削除して修正しますか？\n月別データ(4014件)は保持されます。")) return;
   const statusEl = document.getElementById("rebuild-status");
   try {
@@ -1357,6 +1427,7 @@ async function debugKeys() {
 }
 
 async function forceRebuildData() {
+  if (blockIfReadOnly()) return;
   const statusEl = document.getElementById("rebuild-status");
   if (statusEl) statusEl.textContent = "⏳ 全データを収集中...";
   try {
@@ -1467,6 +1538,7 @@ function copyLog() {
 let cameraStream = null;
 
 async function startCamera() {
+  if (blockIfReadOnly()) return;
   isSaving = false;          // ★新しい撮影に入るのでロックを解除
   lockSaveButton(false);
   try {
@@ -1971,6 +2043,7 @@ function lockSaveButton(on) {
 
 function confirmAndSave() {
   if (isSaving) return; // ★二重実行を遮断
+  if (blockIfReadOnly()) return;
   const slipDigits = document.getElementById("inp-slip").value.trim();
   const slipVal = slipDigits ? "G" + slipDigits : "";
   const amtVal  = parseInt(document.getElementById("inp-amt").value);
@@ -2114,6 +2187,7 @@ async function saveEntry(entry) {
 }
 
 async function undoLastEntry() {
+  if (blockIfReadOnly()) return;
   if (history.length === 0) return;
   const last = [...history].sort((a,b) =>
     new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at)
@@ -2134,6 +2208,7 @@ function closeDupModal() {
 }
 
 function confirmDupReplace() {
+  if (blockIfReadOnly()) return;
   if (!pendingEntry) return;
   const p = pendingEntry;
   const old = history.find(h => h.slip_number === p.slip_number);
@@ -2163,6 +2238,7 @@ function confirmDupReplace() {
 
 // 伝票番号が同じでも別の伝票として保存する（OCR誤読で番号がぶつかった場合）
 async function saveAsSeparateEntry() {
+  if (blockIfReadOnly()) return;
   if (!pendingEntry) return;
   const entry = pendingEntry;
   entry.dup_allowed = true; // PC管理画面で見分けられるよう印を付けておく
@@ -2302,8 +2378,8 @@ function renderHistory() {
             <div class="h-row"><span class="h-l" style="color:#f0c744">税込</span><span class="h-v" style="color:#f0c744;font-weight:800">${fmt(item.incl)}</span></div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-            <button style="background:none;border:1px solid #2a4070;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:13px;color:#5a7aa8" onclick="openEdit(${item.id})">✏️</button>
-            <button class="del-btn" onclick="openDel(${item.id})">🗑</button>
+            ${readOnly ? "" : `<button style="background:none;border:1px solid #2a4070;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:13px;color:#5a7aa8" onclick="openEdit(${item.id})">✏️</button>
+            <button class="del-btn" onclick="openDel(${item.id})">🗑</button>`}
           </div>
         </div>`;
       }).join("");
@@ -2441,8 +2517,8 @@ function renderHistory() {
             </div>
             <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
               ${isDup&&isOldest&&!isReplaced ? `<button style="background:linear-gradient(135deg,#d97706,#b45309);border:none;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:11px;color:#fff;font-weight:700;white-space:nowrap" onclick="openReplace(${item.id})">差替</button>` : ""}
-              <button style="background:none;border:1px solid #2a4070;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:13px;color:#5a7aa8" onclick="openEdit(${item.id})">✏️</button>
-              <button class="del-btn" onclick="openDel(${item.id})">🗑</button>
+              ${readOnly ? "" : `<button style="background:none;border:1px solid #2a4070;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:13px;color:#5a7aa8" onclick="openEdit(${item.id})">✏️</button>
+              <button class="del-btn" onclick="openDel(${item.id})">🗑</button>`}
             </div>
           </div>`;
       }).join("");
@@ -2602,9 +2678,10 @@ function toggleMonth(mId) {
 }
 
 // ── Delete ─────────────────────────────────────────────────────────────────
-function openDel(id) { deleteTargetId=id; document.getElementById("del-modal").classList.add("show"); }
+function openDel(id) { if (blockIfReadOnly()) return; deleteTargetId=id; document.getElementById("del-modal").classList.add("show"); }
 function closeDelModal() { document.getElementById("del-modal").classList.remove("show"); }
 async function confirmDelete() {
+  if (blockIfReadOnly()) { closeDelModal(); return; }
   const id = deleteTargetId;
   const tgt = history.find(h => h.id === id);
   logEvent("DELETE", `${tgt ? tgt.slip_number : id} を削除（残${history.length-1}件）`);
@@ -2661,6 +2738,7 @@ let editDateTarget = new Date();
 let _editYear = 0, _editMonth = 0, _editDay = 0; // ドラム選択値を直接保持
 
 function openEdit(id) {
+  if (blockIfReadOnly()) return;
   editTargetId = id;
   const item = history.find(h=>h.id===id);
   if(!item) return;
@@ -2680,6 +2758,7 @@ function openEdit(id) {
 }
 
 function editLastEntry() {
+  if (blockIfReadOnly()) return;
   if (history.length === 0) return;
   const last = [...history].sort((a,b) =>
     new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at)
@@ -2744,6 +2823,7 @@ function closeEditModal() {
 }
 
 function confirmEdit() {
+  if (blockIfReadOnly()) { closeEditModal(); return; }
   const item = history.find(h=>h.id===editTargetId);
   if(!item) return;
   const digits = String(document.getElementById("edit-slip").value).trim();
