@@ -165,7 +165,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:100;padding:24px}
 .overlay.show{display:flex}
-.modal{background:#111f38;border:1px solid #2a4070;border-radius:16px;padding:28px 24px;width:100%;max-width:340px}
+.modal{background:#111f38;border:1px solid #2a4070;border-radius:16px;padding:28px 24px;width:100%;max-width:340px;max-height:calc(100vh - 48px);overflow-y:auto;-webkit-overflow-scrolling:touch}
 .modal-title{font-size:17px;font-weight:700;margin-bottom:8px}
 .modal-sub{color:#6b7c9d;font-size:13px;margin-bottom:24px}
 .modal-btns{display:flex;gap:10px}
@@ -181,7 +181,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v35</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v38</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -297,8 +297,8 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
       <div style="display:flex;justify-content:center;align-items:center;gap:48px;padding:20px 0 8px">
         <div style="text-align:center">
-          <button onclick="confirmAndSave()" style="width:72px;height:72px;border-radius:50%;border:none;background:#16a34a;color:#fff;font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;margin:0 auto;box-shadow:0 0 16px rgba(22,163,74,0.5)">🟢</button>
-          <div style="font-size:11px;color:#4ade80;margin-top:6px;font-weight:700">保　存</div>
+          <button id="btn-save" onclick="confirmAndSave()" style="width:72px;height:72px;border-radius:50%;border:none;background:#16a34a;color:#fff;font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;margin:0 auto;box-shadow:0 0 16px rgba(22,163,74,0.5);transition:opacity 0.15s">🟢</button>
+          <div id="btn-save-label" style="font-size:11px;color:#4ade80;margin-top:6px;font-weight:700">保　存</div>
         </div>
         <div style="text-align:center">
           <button onclick="retake()" style="width:72px;height:72px;border-radius:50%;border:3px solid #7a9cc8;background:#1e3050;color:#fff;font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;margin:0 auto">⚪️</button>
@@ -473,15 +473,49 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
   <div class="modal">
     <div style="text-align:center;font-size:32px;margin-bottom:8px">⚠️</div>
     <div class="modal-title" style="text-align:center;color:#f87171">重複した伝票番号！</div>
-    <div id="dup-info" style="font-size:13px;color:#7a9cc8;margin:12px 0;line-height:1.9;text-align:center"></div>
-    <div style="background:#0d1829;border-radius:10px;padding:12px;margin-bottom:16px;text-align:center">
-      <div style="font-size:11px;color:#5a7aa8;margin-bottom:4px">古い伝票の金額を書き換えますか？</div>
-      <div style="font-size:13px;color:#f87171;text-decoration:line-through" id="dup-old-amt"></div>
-      <div style="font-size:11px;color:#5a7aa8;margin:4px 0">↓ 今スキャンした金額</div>
-      <div style="font-size:22px;font-weight:800;color:#f0c744" id="dup-new-amt"></div>
+    <div style="text-align:center;font-size:20px;font-weight:800;color:#f87171;margin:10px 0 14px" id="dup-slip"></div>
+
+    <!-- 既存の記録（相手） -->
+    <div style="background:#0d1829;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;color:#5a7aa8;margin-bottom:6px;text-align:center">📋 既に登録されている記録</div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+        <span style="color:#5a7aa8">集計日</span><span style="color:#f0c744;font-weight:800;font-size:15px" id="dup-old-cd">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+        <span style="color:#5a7aa8">金額</span><span style="color:#e8edf5;font-weight:700" id="dup-old-amt">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+        <span style="color:#5a7aa8">フレーム</span><span style="color:#e8edf5" id="dup-old-frame">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+        <span style="color:#5a7aa8">販売店</span><span style="color:#e8edf5" id="dup-old-co">—</span>
+      </div>
+      <div style="font-size:10px;color:#4a6188;text-align:right;margin-top:5px" id="dup-old-scan"></div>
     </div>
+
+    <div style="text-align:center;font-size:11px;color:#5a7aa8;margin-bottom:6px">▼ 今スキャンした内容</div>
+
+    <!-- 今回のスキャン -->
+    <div style="background:#0d1829;border-radius:10px;padding:12px;margin-bottom:14px;border:1px solid #2a4070">
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+        <span style="color:#5a7aa8">集計日</span><span style="color:#f0c744;font-weight:800;font-size:15px" id="dup-new-cd">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+        <span style="color:#5a7aa8">金額</span><span style="color:#e8edf5;font-weight:700" id="dup-new-amt">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+        <span style="color:#5a7aa8">フレーム</span><span style="color:#e8edf5" id="dup-new-frame">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+        <span style="color:#5a7aa8">販売店</span><span style="color:#e8edf5" id="dup-new-co">—</span>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:#7a9cc8;background:#1a2942;border-radius:8px;padding:9px 11px;margin-bottom:14px;line-height:1.7" id="dup-hint"></div>
+
     <div style="display:flex;flex-direction:column;gap:8px">
-      <button class="btn-pri" style="background:linear-gradient(135deg,#d97706,#b45309);padding:14px" onclick="confirmDupReplace()">🔄 差し替える（古い方を更新）</button>
+      <button class="btn-pri" style="background:linear-gradient(135deg,#059669,#047857);padding:14px" onclick="saveAsSeparateEntry()">➕ 別の伝票として保存する</button>
+      <button class="btn-pri" style="background:linear-gradient(135deg,#d97706,#b45309);padding:14px;line-height:1.4" onclick="confirmDupReplace()">🔄 同じ伝票なので差し替える<br><span style="font-size:11px;font-weight:600;opacity:0.85">金額のみ更新／集計日はそのまま</span></button>
       <button class="btn-sec" style="padding:14px" onclick="closeDupModal()">✕ 今回のスキャンを取り消す</button>
     </div>
   </div>
@@ -1217,6 +1251,8 @@ async function forceRebuildData() {
 let cameraStream = null;
 
 async function startCamera() {
+  isSaving = false;          // ★新しい撮影に入るのでロックを解除
+  lockSaveButton(false);
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
@@ -1703,7 +1739,22 @@ function calcPreview() {
 
 let pendingEntry = null;
 
+// ★保存中フラグ。二度押しによる二重保存を防ぐ
+let isSaving = false;
+
+function lockSaveButton(on) {
+  const btn = document.getElementById("btn-save");
+  const lbl = document.getElementById("btn-save-label");
+  if (btn) {
+    btn.disabled = on;
+    btn.style.opacity = on ? "0.4" : "1";
+    btn.style.pointerEvents = on ? "none" : "auto";
+  }
+  if (lbl) lbl.textContent = on ? "保存中…" : "保　存";
+}
+
 function confirmAndSave() {
+  if (isSaving) return; // ★二重実行を遮断
   const slipDigits = document.getElementById("inp-slip").value.trim();
   const slipVal = slipDigits ? "G" + slipDigits : "";
   const amtVal  = parseInt(document.getElementById("inp-amt").value);
@@ -1756,14 +1807,50 @@ function confirmAndSave() {
   const existing = history.find(h => h.slip_number === slipVal);
   if (existing) {
     pendingEntry = entry;
+    const fmtCd = (key) => {
+      if (!key) return "—";
+      const [y,m,d] = key.split("-").map(Number);
+      if (!y) return "—";
+      const w = ["日","月","火","水","木","金","土"][new Date(y,m-1,d).getDay()];
+      return `${m}月${d}日(${w})`;
+    };
+    const coName = (c) => c === "chiba" ? "千葉トヨタ" : c === "nets" ? "ネッツ千葉" : (c || "—");
+
+    document.getElementById("dup-slip").textContent = slipVal;
+
+    // 既存の記録
+    document.getElementById("dup-old-cd").textContent    = fmtCd(existing.collection_date);
+    document.getElementById("dup-old-amt").textContent   = fmt(existing.total_excl_tax) + " 円";
+    document.getElementById("dup-old-frame").textContent = existing.frame_number || "—";
+    document.getElementById("dup-old-co").textContent    = coName(existing.company);
     const realDate = new Date(existing.real_scanned_at || existing.scanned_at);
     const d = realDate.toLocaleDateString("ja-JP",{month:"long",day:"numeric"});
     const t = realDate.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
-    document.getElementById("dup-info").innerHTML =
-      `<strong style="color:#f87171">${slipVal}</strong><br>` +
-      `既に ${d} ${t} にスキャン済み`;
-    document.getElementById("dup-old-amt").textContent = fmt(existing.total_excl_tax) + " 円（税抜）";
-    document.getElementById("dup-new-amt").textContent = fmt(amtVal) + " 円（税抜）";
+    document.getElementById("dup-old-scan").textContent = `撮影：${d} ${t}`;
+
+    // 今回のスキャン
+    document.getElementById("dup-new-cd").textContent    = fmtCd(cdKey);
+    document.getElementById("dup-new-amt").textContent   = fmt(amtVal) + " 円";
+    document.getElementById("dup-new-frame").textContent = frameVal || "—";
+    document.getElementById("dup-new-co").textContent    = coName(company);
+
+    // 判断の手がかり
+    const sameFrame = existing.frame_number && frameVal && existing.frame_number === frameVal;
+    const diffFrame = existing.frame_number && frameVal && existing.frame_number !== frameVal;
+    let hint;
+    if (diffFrame) {
+      hint = "⚠️ フレーム番号が違います。<b>別の車＝別の伝票</b>の可能性が高いです。伝票番号のOCR誤読が疑われます。紙の番号を確認し、違っていれば「別の伝票として保存」を選んでください。";
+    } else if (sameFrame) {
+      hint = "フレーム番号が一致しています。<b>同じ伝票を2回撮った</b>可能性が高いです。";
+    } else {
+      hint = "紙の伝票番号を見比べてください。番号が違っていればOCRの誤読なので「別の伝票として保存」を選んでください。";
+    }
+    // 集計日が食い違う場合の注意書き
+    if (existing.collection_date && cdKey && existing.collection_date !== cdKey) {
+      hint += `<br><br>📅 集計日が違います。差し替えても集計日は<b style="color:#f0c744">${fmtCd(existing.collection_date)}</b>のまま据え置かれます（金額のみ更新）。日付を直したい場合は履歴の編集から変更してください。`;
+    }
+    document.getElementById("dup-hint").innerHTML = hint;
+
     document.getElementById("dup-modal").classList.add("show");
     return;
   }
@@ -1772,6 +1859,8 @@ function confirmAndSave() {
 }
 
 async function saveEntry(entry) {
+  isSaving = true;
+  lockSaveButton(true);
   history.unshift(entry);
   window._appHistory = history;
   const ok = await saveHistory(history);
@@ -1779,6 +1868,8 @@ async function saveEntry(entry) {
     // 保存失敗 → historyから取り除く（表示だけで保存されてない状態を防ぐ）
     history.shift();
     window._appHistory = history;
+    isSaving = false;
+    lockSaveButton(false);
     return;
   }
   document.getElementById("input-form").style.display = "none";
@@ -1801,6 +1892,8 @@ async function saveEntry(entry) {
 
   document.getElementById("result-section").style.display = "block";
   updateHeader(); updateRecentBar(); renderHistory();
+  isSaving = false;
+  lockSaveButton(false);
 }
 
 function undoLastEntry() {
@@ -1818,26 +1911,52 @@ function undoLastEntry() {
 function closeDupModal() {
   document.getElementById("dup-modal").classList.remove("show");
   pendingEntry = null;
+  isSaving = false;
+  lockSaveButton(false);
 }
 
 function confirmDupReplace() {
   if (!pendingEntry) return;
-  const old = history.find(h => h.slip_number === pendingEntry.slip_number);
+  const p = pendingEntry;
+  const old = history.find(h => h.slip_number === p.slip_number);
   if (old) {
-    old.replaced_from = old.replaced_from ?? old.total_excl_tax;
-    old.total_excl_tax = pendingEntry.total_excl_tax;
-    old.tax = pendingEntry.tax;
-    old.incl = pendingEntry.incl;
+    old.replaced_from  = old.replaced_from ?? old.total_excl_tax;
+    old.total_excl_tax = p.total_excl_tax;
+    old.tax            = p.tax;
+    old.incl           = p.incl;
+    old.tax_rate       = p.tax_rate;
+    old.frame_number   = p.frame_number || old.frame_number || "";
+    old.company        = p.company || old.company;
+    old.replaced_at    = new Date().toISOString(); // 差し替えた日時（追跡用）
+
+    // ★集計日・請求月・撮影日時は「元々の記録」のまま据え置く。
+    //   再スキャン時にドラムの日付がずれていても、集計が別の日や別の月に
+    //   移動しないようにするため。日付を直したいときは編集モーダルを使う。
   }
   document.getElementById("dup-modal").classList.remove("show");
   pendingEntry = null;
   saveHistory(history);
   updateHeader(); updateRecentBar(); renderHistory();
   document.getElementById("input-form").style.display = "none";
+  isSaving = false;
+  lockSaveButton(false);
   startCamera();
 }
 
+// 伝票番号が同じでも別の伝票として保存する（OCR誤読で番号がぶつかった場合）
+async function saveAsSeparateEntry() {
+  if (!pendingEntry) return;
+  const entry = pendingEntry;
+  entry.dup_allowed = true; // PC管理画面で見分けられるよう印を付けておく
+  pendingEntry = null;
+  document.getElementById("dup-modal").classList.remove("show");
+  await saveEntry(entry);
+  showToastMsg("✅ 別の伝票として保存しました（番号の重複あり）");
+}
+
 function retake() {
+  isSaving = false;
+  lockSaveButton(false);
   document.getElementById("input-form").style.display = "none";
   document.getElementById("preview-wrap").style.display = "none";
   startCamera();
