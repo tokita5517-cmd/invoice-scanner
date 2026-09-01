@@ -7,7 +7,32 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="注文書スキャナー">
 <title>注文書スキャナー</title>
-<script>const VISION_API_KEY = "AIzaSyBPS5kc6S5n-gOTYghpfSc1W_nO0zZILzM";</script>
+<script>
+const VISION_API_KEY = "AIzaSyBPS5kc6S5n-gOTYghpfSc1W_nO0zZILzM";
+
+// ★何かが落ちたら真っ白にせず、画面にエラーを出す
+(function(){
+  function paintError(title, msg) {
+    try {
+      const d = document.createElement("div");
+      d.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#0a1424;color:#f87171;"
+        + "font-family:-apple-system,sans-serif;padding:24px;overflow:auto;font-size:13px;line-height:1.8";
+      d.innerHTML = "<div style='font-size:18px;font-weight:900;margin-bottom:12px'>⚠️ " + title + "</div>"
+        + "<div style='color:#e8edf5;word-break:break-all;background:#111f38;padding:12px;border-radius:8px'>"
+        + String(msg).replace(/</g,"&lt;") + "</div>"
+        + "<div style='color:#7a9cc8;margin-top:16px;font-size:12px'>この画面をスクリーンショットして管理者に送ってください。</div>";
+      (document.body || document.documentElement).appendChild(d);
+    } catch(e) {}
+  }
+  window.addEventListener("error", e => paintError("エラーが発生しました", (e.message||"") + "\n" + (e.filename||"") + ":" + (e.lineno||"")));
+  window.addEventListener("unhandledrejection", e => paintError("処理が失敗しました", (e.reason && e.reason.message) || e.reason || "不明"));
+
+  // 10秒たっても起動が終わらないなら、固まっていることを知らせる
+  window._bootWatchdog = setTimeout(function(){
+    if (!window._bootDone) paintError("起動が完了しません", "10秒以上応答がありません。通信状況を確認するか、アプリを再起動してください。");
+  }, 10000);
+})();
+</script>
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
@@ -181,7 +206,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v40</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v41</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -594,7 +619,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v40";
+const APP_VERSION = "v41";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -956,18 +981,20 @@ const lsSet = (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catc
 // ── 端末ID & 動作ログ ────────────────────────────────────────────────────────
 // どの端末がいつ何をしたかを残す。データ消失の原因追跡用。
 function getDeviceId() {
-  let id = localStorage.getItem("device_id");
-  if (!id) {
-    id = Math.random().toString(36).slice(2,7).toUpperCase();
-    localStorage.setItem("device_id", id);
-  }
-  return id;
+  try {
+    let id = localStorage.getItem("device_id");
+    if (!id) {
+      id = Math.random().toString(36).slice(2,7).toUpperCase();
+      localStorage.setItem("device_id", id);
+    }
+    return id;
+  } catch(e) { return "NOSTG"; }   // プライベートモード等でlocalStorageが使えない場合
 }
 function getDeviceLabel() {
-  return localStorage.getItem("device_label") || "";
+  try { return localStorage.getItem("device_label") || ""; } catch(e) { return ""; }
 }
 function setDeviceLabel(name) {
-  localStorage.setItem("device_label", name || "");
+  try { localStorage.setItem("device_label", name || ""); } catch(e) {}
   showToastMsg("✅ 端末名を保存しました");
   renderLogPanel();
 }
@@ -976,6 +1003,7 @@ const DEVICE_ID = getDeviceId();
 let logBuffer = [];
 
 function logEvent(type, detail) {
+  try {
   const rec = {
     t: new Date().toISOString(),
     dev: DEVICE_ID,
@@ -990,6 +1018,7 @@ function logEvent(type, detail) {
   lsSet("oplog", local);
   console.log(`[LOG ${type}]`, detail);
   queueLogFlush();
+  } catch(e) { console.warn("logEvent失敗:", e); }
 }
 
 let logFlushTimer = null;
@@ -1014,6 +1043,19 @@ async function flushLog() {
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
+  try {
+    await bootSequence();
+  } catch(e) {
+    console.error("init error:", e);
+    hideLoadingBar();
+    showLoadError();
+  } finally {
+    window._bootDone = true;
+    clearTimeout(window._bootWatchdog);
+  }
+}
+
+async function bootSequence() {
   if (!window._firebaseReady) {
     await new Promise(resolve => window.addEventListener("firebaseReady", resolve, {once:true}));
   }
@@ -1052,7 +1094,9 @@ async function init() {
   hideLoadingBar();
 
   // ★今回の内容を端末内にバックアップしておく
-  if (historyLoaded && history.length > 0) idbSet("history_backup", history);
+  if (historyLoaded && history.length > 0) {
+    idbSet("history_backup", history).catch(e => console.warn("バックアップ保存失敗:", e));
+  }
 
   logEvent("STARTUP", `読込 ${history.length}件 / loaded=${historyLoaded}`);
 
@@ -2162,7 +2206,7 @@ async function saveEntry(entry) {
   }
 
   document.getElementById("result-section").style.display = "block";
-  idbSet("history_backup", history);
+  idbSet("history_backup", history).catch(e => console.warn("バックアップ保存失敗:", e));
   logEvent("SCAN", `${entry.slip_number} ${entry.total_excl_tax}円 集計日=${entry.collection_date} 計${history.length}件`);
   updateHeader(); updateRecentBar(); renderHistory();
   isSaving = false;
