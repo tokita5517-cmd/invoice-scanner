@@ -206,7 +206,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v41</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v42</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -619,7 +619,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v41";
+const APP_VERSION = "v42";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -766,14 +766,6 @@ async function loadAllHistory() {
   return [];
 }
 
-function showRecoverNotice(n) {
-  const el = document.createElement("div");
-  el.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:9998;background:#047857;color:#fff;padding:12px 16px;font-size:13px;font-weight:700;text-align:center;line-height:1.7";
-  el.innerHTML = `♻️ 端末内のバックアップから ${n}枚 を復元しました`
-    + `<br><button onclick="this.parentNode.remove()" style="margin-top:8px;background:#fff;color:#047857;border:none;border-radius:8px;padding:6px 18px;font-weight:800;font-family:inherit">閉じる</button>`;
-  document.body.appendChild(el);
-}
-
 function showCountDropWarning(before, now) {
   const el = document.createElement("div");
   el.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:9998;background:#b45309;color:#fff;padding:12px 16px;font-size:13px;font-weight:700;text-align:center;line-height:1.7";
@@ -815,23 +807,6 @@ function showToastMsg(msg) {
 }
 
 // 月別ドキュメントに分割保存
-// 明示的に削除された伝票のID（墓標）。マージ時にこれだけは復活させない
-let deletedIds = new Set();
-
-async function loadDeletedIds() {
-  try {
-    const d = await fsGet("deleted_ids");
-    deletedIds = new Set(Array.isArray(d) ? d : []);
-  } catch(e) { deletedIds = new Set(); }
-}
-
-async function markDeleted(id) {
-  if (!id) return;
-  deletedIds.add(id);
-  try { await fsSet("deleted_ids", [...deletedIds]); }
-  catch(e) { console.error("markDeleted error:", e); }
-}
-
 async function saveHistory(allItems) {
   // ★読み込みが成功していない状態では絶対に書き込まない
   // （0件のまま保存すると、その月の実データが空で上書きされてしまう）
@@ -841,56 +816,24 @@ async function saveHistory(allItems) {
   }
   try {
     const monthGroups = {};
-    const idToMonth = {};   // このアプリが把握している「この伝票は何月の所属か」
     allItems.forEach(item => {
       const key = getMonthDocKey(item);
       if (!monthGroups[key]) monthGroups[key] = [];
       monthGroups[key].push(item);
-      if (item.id) idToMonth[item.id] = key;
     });
     const docKeys = Object.keys(monthGroups);
 
-    // ★丸ごと上書きせず、書き込む直前にサーバーの最新を読んで統合する。
-    //   他の端末や古いタブが追加したデータを踏み潰さないため。
+    // 並列ではなく順番に書き込む（Firestoreの制限対策）
     for (const key of docKeys) {
-      let remote = [];
-      try {
-        const r = await fsGetServer(key);
-        if (Array.isArray(r)) remote = r;
-      } catch(e) {
-        console.warn(`${key} の再読み込みに失敗。統合をスキップ:`, e.message);
-        // 相手の状態が読めないなら上書きは危険。この月はスキップして中断する
-        showSaveError(`${key} の確認に失敗したため保存を中止しました。通信を確認して再度お試しください。`);
-        return false;
-      }
-
-      const merged = new Map();
-
-      // 1) まずサーバー側の内容を土台にする
-      remote.forEach(item => {
-        if (!item || !item.id) return;
-        if (deletedIds.has(item.id)) return;              // 明示削除ぶんは復活させない
-        if (idToMonth[item.id] && idToMonth[item.id] !== key) return; // 別月へ移動した伝票
-        merged.set(item.id, item);
-      });
-
-      // 2) 手元の内容で上書き・追加する
-      monthGroups[key].forEach(item => {
-        if (!item || !item.id) return;
-        if (deletedIds.has(item.id)) return;
-        merged.set(item.id, item);
-      });
-
-      await fsSet(key, [...merged.values()]);
-      if (remote.length > merged.size) {
-        logEvent("SHRINK", `${key} が ${remote.length}→${merged.size}件 に減少`);
-      }
+      await fsSet(key, monthGroups[key]);
     }
 
     // インデックス更新
     const existingIndex = (await fsGet("history_index")) || [];
     const allKeys = [...new Set([...existingIndex, ...docKeys])].sort();
     await fsSet("history_index", allKeys);
+    logEvent("SAVE", `${docKeys.join(",")} に計${allItems.length}件を書込`);
+    setKnownCount(allItems.length);   // ★自分の操作による増減はここで記録
     return true;
   } catch(e) {
     console.error("saveHistory error:", e);
@@ -956,25 +899,6 @@ async function idbGet(key) {
   });
 }
 
-async function idbSet(key, value) {
-  return new Promise((resolve) => {
-    const req = indexedDB.open("InvoiceScanner", 1);
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains("kv")) db.createObjectStore("kv");
-    };
-    req.onsuccess = e => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains("kv")) { resolve(false); return; }
-      const tx = db.transaction("kv", "readwrite");
-      tx.objectStore("kv").put(value, key);
-      tx.oncomplete = () => resolve(true);
-      tx.onerror = () => resolve(false);
-    };
-    req.onerror = () => resolve(false);
-  });
-}
-
 const lsGet = k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):null; } catch{return null;} };
 const lsSet = (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch(e){} };
 
@@ -1001,6 +925,15 @@ function setDeviceLabel(name) {
 
 const DEVICE_ID = getDeviceId();
 let logBuffer = [];
+
+// この端末が把握している「あるべき件数」。保存・削除のたびに更新する。
+// これにより、自分で消したぶんは警告にならず、身に覚えのない減少だけを検知できる。
+function setKnownCount(n) {
+  try {
+    localStorage.setItem("last_known_count", String(n));
+    localStorage.setItem("last_known_at", new Date().toISOString());
+  } catch(e) {}
+}
 
 function logEvent(type, detail) {
   try {
@@ -1062,41 +995,10 @@ async function bootSequence() {
   // ★読み込み中は「0枚」を出さない（誤解と誤操作を防ぐ）
   showLoadingBar();
 
-  await loadDeletedIds();   // ★削除済みIDを先に読む
   // ★月別シャーディング対応の読み込みを使う（旧 inv_history 直読みではない）
   history = await loadAllHistory();
-
-  // ★端末内バックアップと合体させる（件数の多い方を選ぶのではなく、両方を統合）
-  //   片方にしか無い伝票も残る。削除済みリストに載っているものだけ除外する。
-  if (historyLoaded) {
-    try {
-      const backup = await idbGet("history_backup");
-      if (Array.isArray(backup) && backup.length > 0) {
-        const map = new Map();
-        backup.forEach(i => { if (i && i.id && !deletedIds.has(i.id)) map.set(i.id, i); });
-        const cloudIds = new Set();
-        history.forEach(i => { if (i && i.id) { cloudIds.add(i.id); map.set(i.id, i); } }); // クラウド側を優先
-        const recovered = backup.filter(i => i && i.id && !cloudIds.has(i.id) && !deletedIds.has(i.id));
-        const mergedList = [...map.values()]
-          .sort((a,b) => new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at));
-
-        if (recovered.length > 0) {
-          logEvent("RECOVER", `端末内バックアップから${recovered.length}件を復元 (cloud=${history.length} → ${mergedList.length})`);
-          history = mergedList;
-          await saveHistory(history);      // 復元ぶんをクラウドへ戻す
-          showRecoverNotice(recovered.length);
-        }
-      }
-    } catch(e) { console.warn("バックアップ統合に失敗:", e); }
-  }
-
   window._appHistory = history;
   hideLoadingBar();
-
-  // ★今回の内容を端末内にバックアップしておく
-  if (historyLoaded && history.length > 0) {
-    idbSet("history_backup", history).catch(e => console.warn("バックアップ保存失敗:", e));
-  }
 
   logEvent("STARTUP", `読込 ${history.length}件 / loaded=${historyLoaded}`);
 
@@ -1111,9 +1013,8 @@ async function bootSequence() {
         logEvent("DROP", `件数減少 ${lastKnown} → ${history.length}`);
         showCountDropWarning(lastKnown, history.length);
       }
-      localStorage.setItem("last_known_count", String(history.length));
-      localStorage.setItem("last_known_at", new Date().toISOString());
     } catch(e) {}
+    setKnownCount(history.length);
   }
 
   if (historyLoaded && history.length === 0) {
@@ -2206,7 +2107,6 @@ async function saveEntry(entry) {
   }
 
   document.getElementById("result-section").style.display = "block";
-  idbSet("history_backup", history).catch(e => console.warn("バックアップ保存失敗:", e));
   logEvent("SCAN", `${entry.slip_number} ${entry.total_excl_tax}円 集計日=${entry.collection_date} 計${history.length}件`);
   updateHeader(); updateRecentBar(); renderHistory();
   isSaving = false;
@@ -2219,7 +2119,7 @@ async function undoLastEntry() {
     new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at)
   )[0];
   if (!confirm(`「${last.slip_number}」の保存を取り消しますか？`)) return;
-  markDeleted(last.id);            // ★墓標を立てる
+  logEvent("UNDO", `${last.slip_number} の保存を取り消し`);
   history = history.filter(h => h.id !== last.id);
   saveHistory(history);
   document.getElementById("result-section").style.display = "none";
@@ -2707,8 +2607,7 @@ function closeDelModal() { document.getElementById("del-modal").classList.remove
 async function confirmDelete() {
   const id = deleteTargetId;
   const tgt = history.find(h => h.id === id);
-  logEvent("DELETE", `${tgt ? tgt.slip_number : id} を削除`);
-  await markDeleted(id);           // ★先に墓標を立てる（統合で復活しないように）
+  logEvent("DELETE", `${tgt ? tgt.slip_number : id} を削除（残${history.length-1}件）`);
   history = history.filter(h=>h.id!==id);
   await saveHistory(history);
   closeDelModal();
