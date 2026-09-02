@@ -221,7 +221,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v44</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v45</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -643,7 +643,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v44";
+const APP_VERSION = "v45";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -1867,12 +1867,24 @@ function initDrum(date, isOCR) {
   const targetDay = date.getDate();
 
   let mIdx = monthList.findIndex(m => m.year===targetYear && m.month===targetMonth);
-  if (mIdx < 0) mIdx = Math.floor(monthList.length/2);
+  let clamped = false;
+  if (mIdx < 0) {
+    // ★選択肢に無い日付（OCRの年誤読など）。表示だけ戻して中身を放置すると
+    //   2036年などの異常な集計日がそのまま保存されてしまうため、実体も補正する。
+    mIdx = Math.floor(monthList.length/2);
+    const m = monthList[mIdx];
+    const maxDay = new Date(m.year, m.month, 0).getDate();
+    currentCollectionDate = new Date(m.year, m.month-1, Math.min(targetDay, maxDay));
+    clamped = true;
+  }
 
-  const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+  const cy = currentCollectionDate.getFullYear();
+  const cm = currentCollectionDate.getMonth()+1;
+  const cd = currentCollectionDate.getDate();
+  const daysInMonth = new Date(cy, cm, 0).getDate();
 
   renderDrumMonth(monthList, mIdx);
-  renderDrumDay(daysInMonth, targetDay - 1);
+  renderDrumDay(daysInMonth, cd - 1);
   setupDrumTouch("drum-month", monthList.length, mIdx, (newIdx) => {
     const m = monthList[newIdx];
     const maxDay = new Date(m.year, m.month, 0).getDate();
@@ -1882,7 +1894,7 @@ function initDrum(date, isOCR) {
     renderDrumDay(maxDay, day-1);
     updateCdBadge(false);
   });
-  setupDrumTouch("drum-day", daysInMonth, targetDay-1, (newIdx) => {
+  setupDrumTouch("drum-day", daysInMonth, cd-1, (newIdx) => {
     currentCollectionDate = new Date(
       currentCollectionDate.getFullYear(),
       currentCollectionDate.getMonth(),
@@ -1891,7 +1903,10 @@ function initDrum(date, isOCR) {
     updateCdBadge(false);
   });
 
-  updateCdBadge(isOCR);
+  updateCdBadge(isOCR && !clamped);
+  if (clamped) {
+    logEvent("CD_CLAMP", `日付を補正 ${targetYear}/${targetMonth}/${targetDay} → ${cy}/${cm}/${cd}`);
+  }
 }
 
 function renderDrumMonth(monthList, activeIdx) {
@@ -2062,6 +2077,34 @@ function lockSaveButton(on) {
 function confirmAndSave() {
   if (isSaving) return; // ★二重実行を遮断
   if (blockIfReadOnly()) return;
+
+  // ★伝票番号は日付を含む（G + MM + DD + 連番）。集計日と食い違っていたら止める。
+  //   2036年8月や、8/26の伝票が9月に入るといった取り違えを保存前に捕まえる。
+  const _slip = document.getElementById("inp-slip").value.trim();
+  const _cd   = currentCollectionDate;
+  if (/^\d{8}$/.test(_slip) && _cd) {
+    const sM = parseInt(_slip.slice(0,2),10), sD = parseInt(_slip.slice(2,4),10);
+    const cM = _cd.getMonth()+1, cD = _cd.getDate();
+    const yearOK = Math.abs(_cd.getFullYear() - new Date().getFullYear()) <= 1;
+    if (sM>=1 && sM<=12 && sD>=1 && sD<=31 && (sM!==cM || sD!==cD || !yearOK)) {
+      const msg = `⚠️ 集計日が伝票番号と一致しません\n\n`
+        + `伝票番号 G${_slip} → ${sM}月${sD}日の伝票\n`
+        + `いま設定されている集計日 → ${_cd.getFullYear()}年${cM}月${cD}日\n\n`
+        + `「OK」で ${sM}月${sD}日 に直して保存します。\n`
+        + `「キャンセル」で戻って自分で確認します。`;
+      if (confirm(msg)) {
+        const y = (sM > (new Date().getMonth()+1) + 1)
+          ? new Date().getFullYear() - 1   // 年末年始をまたぐ場合
+          : new Date().getFullYear();
+        currentCollectionDate = new Date(y, sM-1, sD);
+        updateCdBadge(false);
+        logEvent("CD_FIX", `G${_slip} の集計日を ${y}/${sM}/${sD} に自動修正`);
+      } else {
+        return;
+      }
+    }
+  }
+
   const slipDigits = document.getElementById("inp-slip").value.trim();
   const slipVal = slipDigits ? "G" + slipDigits : "";
   const amtVal  = parseInt(document.getElementById("inp-amt").value);
@@ -2499,6 +2542,19 @@ function renderHistory() {
         const myIdx = globalIdx;
         const dups = slipMap[item.slip_number];
         const isDup = dups && dups.length > 1;
+        // 伝票番号の日付と集計日のズレを検出（G+MM+DD+連番）
+        let cdMismatch = null;
+        {
+          const sn = String(item.slip_number||"").replace(/^G/,"");
+          const cdv = item.collection_date;
+          if (/^\d{8}$/.test(sn) && cdv) {
+            const sM=parseInt(sn.slice(0,2),10), sD=parseInt(sn.slice(2,4),10);
+            const p=cdv.split("-").map(Number);
+            if (sM>=1&&sM<=12&&sD>=1&&sD<=31 && (p[1]!==sM||p[2]!==sD||Math.abs(p[0]-new Date().getFullYear())>1)) {
+              cdMismatch = `${sM}/${sD}`;
+            }
+          }
+        }
         const isReplaced = !!item.replaced_from;
         const dupOthers = isDup ? dups.filter(d=>d.id!==item.id) : [];
         const isOldest = isDup && dupOthers.some(d => new Date(d.real_scanned_at||d.scanned_at) > new Date(item.real_scanned_at||item.scanned_at));
@@ -2522,9 +2578,11 @@ function renderHistory() {
                   ${co ? `<span class="co-badge-${co}">${coLabel(co)}</span>` : ""}
                   ${isReplaced ? '<span style="font-size:9px;background:#d97706;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">差替済</span>' : ""}
                   ${isDup&&!isReplaced ? '<span style="font-size:9px;background:#c0392b;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">⚠️重複</span>' : ""}
+                  ${cdMismatch ? `<span style="font-size:9px;background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">📅日付ズレ</span>` : ""}
                 </div>
                 <div class="hist-time" style="color:#7a9cc8;font-size:10px">${scanDateDisp}<span class="hist-tax-badge">税${item.tax_rate}%</span></div>
                 ${item.frame_number ? `<div style="font-size:10px;color:#7a9cc8;margin-top:1px">🚗 ${item.frame_number}</div>` : ""}
+                ${cdMismatch ? `<div style="font-size:10px;color:#a78bfa;margin-top:2px">伝票番号は ${cdMismatch} の日付です</div>` : ""}
                 ${isReplaced ? `<div style="font-size:10px;color:#d97706;margin-top:2px">差替前: ${fmt(item.replaced_from)}円 → ${fmt(item.total_excl_tax)}円</div>` : ""}
               </div>
             </div>
