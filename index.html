@@ -12,25 +12,40 @@ const VISION_API_KEY = "AIzaSyBPS5kc6S5n-gOTYghpfSc1W_nO0zZILzM";
 
 // ★何かが落ちたら真っ白にせず、画面にエラーを出す
 (function(){
-  function paintError(title, msg) {
+  function paintError(title, msg, opts) {
+    opts = opts || {};
     try {
+      const id = opts.id || ("err-" + Date.now());
+      if (opts.id && document.getElementById(opts.id)) return; // 二重表示しない
       const d = document.createElement("div");
-      d.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#0a1424;color:#f87171;"
-        + "font-family:-apple-system,sans-serif;padding:24px;overflow:auto;font-size:13px;line-height:1.8";
-      d.innerHTML = "<div style='font-size:18px;font-weight:900;margin-bottom:12px'>⚠️ " + title + "</div>"
-        + "<div style='color:#e8edf5;word-break:break-all;background:#111f38;padding:12px;border-radius:8px'>"
+      d.id = id;
+      // ★全画面で覆わない。上部のバナーにして、下の操作を妨げない
+      d.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483647;background:#0a1424;"
+        + "border-bottom:2px solid #f87171;color:#f87171;font-family:-apple-system,sans-serif;"
+        + "padding:16px;max-height:60vh;overflow:auto;font-size:13px;line-height:1.8";
+      d.innerHTML = "<div style='font-size:16px;font-weight:900;margin-bottom:10px'>⚠️ " + title + "</div>"
+        + "<div style='color:#e8edf5;word-break:break-all;background:#111f38;padding:11px;border-radius:8px;font-size:12px'>"
         + String(msg).replace(/</g,"&lt;") + "</div>"
-        + "<div style='color:#7a9cc8;margin-top:16px;font-size:12px'>この画面をスクリーンショットして管理者に送ってください。</div>";
+        + "<div style='color:#7a9cc8;margin-top:10px;font-size:11px'>この画面をスクリーンショットして管理者に送ってください。</div>"
+        + "<button onclick=\"document.getElementById('" + id + "').remove()\" style='margin-top:12px;width:100%;"
+        + "background:#1e3050;color:#e8edf5;border:1px solid #2a4070;border-radius:8px;padding:11px;"
+        + "font-weight:800;font-family:inherit;font-size:13px'>✕ 閉じてアプリを使う</button>";
       (document.body || document.documentElement).appendChild(d);
     } catch(e) {}
   }
+  window._paintError = paintError;
   window.addEventListener("error", e => paintError("エラーが発生しました", (e.message||"") + "\n" + (e.filename||"") + ":" + (e.lineno||"")));
   window.addEventListener("unhandledrejection", e => paintError("処理が失敗しました", (e.reason && e.reason.message) || e.reason || "不明"));
 
-  // 10秒たっても起動が終わらないなら、固まっていることを知らせる
+  // 起動が終わらない場合の見張り。読み込みは通信状況で30秒以上かかることもあるので
+  // 余裕を持たせ、あくまで「お知らせ」にとどめる（操作は妨げない）
   window._bootWatchdog = setTimeout(function(){
-    if (!window._bootDone) paintError("起動が完了しません", "10秒以上応答がありません。通信状況を確認するか、アプリを再起動してください。");
-  }, 10000);
+    if (!window._bootDone) {
+      paintError("読み込みに時間がかかっています",
+        "通信が遅い可能性があります。そのままお待ちいただくか、電波の良い場所で再起動してください。",
+        {id:"boot-warn"});
+    }
+  }, 45000);
 })();
 </script>
 <!-- Firebase SDK -->
@@ -206,7 +221,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v43</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v44</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -628,7 +643,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v43";
+const APP_VERSION = "v44";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -841,7 +856,7 @@ function showLoadingBar() {
   if (document.getElementById("load-bar")) return;
   const el = document.createElement("div");
   el.id = "load-bar";
-  el.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:9997;background:#1d4ed8;color:#fff;padding:9px 16px;font-size:13px;font-weight:700;text-align:center";
+  el.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:9997;background:#1d4ed8;color:#fff;padding:9px 16px;font-size:13px;font-weight:700;text-align:center;pointer-events:none";
   el.textContent = "☁️ クラウドからデータを読み込み中…";
   document.body.appendChild(el);
 }
@@ -1052,6 +1067,9 @@ async function init() {
   } finally {
     window._bootDone = true;
     clearTimeout(window._bootWatchdog);
+    // ★起動が終わったら、遅延の警告バナーは自動で消す
+    const w = document.getElementById("boot-warn");
+    if (w) w.remove();
   }
 }
 
