@@ -221,7 +221,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v50</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v51</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -654,7 +654,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v50";
+const APP_VERSION = "v51";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -733,6 +733,15 @@ let historyLoaded = false;
 //   ここに入っていて書き込み対象から外れた月は「空になった月」なので、
 //   明示的に空で上書きしないと古い中身が生き残り、削除した伝票が復活する。
 let knownMonthKeys = new Set();
+// ★月ごとに「最後に書き込んだ中身」を控える。変化が無い月への書き込みを省くため。
+let lastWrittenMonth = {};
+// 並び順やキー順の違いで誤って「変更あり」と判定しないよう、中身だけで指紋を作る
+function monthSignature(arr) {
+  if (!Array.isArray(arr)) return "";
+  return arr.map(i => [i.id, i.slip_number, i.total_excl_tax, i.collection_date,
+                       i.company, i.frame_number, i.tax_rate, i.billing_month].join("|"))
+            .sort().join(";");
+}
 
 const MAX_ATTEMPTS = 5;
 
@@ -779,6 +788,12 @@ async function loadAllHistory() {
       const results = await Promise.all(allKeys.map(key => readFn(key).catch(() => fsGet(key))));
       const all = [];
       results.forEach(r => { if (Array.isArray(r)) all.push(...r); });
+
+      // ★読み込んだ時点の中身を控える。次の保存で「変わった月」だけを書くため。
+      //   これが無いと起動後の1回目に全月を書き直してしまう。
+      results.forEach((r, i) => {
+        if (Array.isArray(r)) lastWrittenMonth[allKeys[i]] = monthSignature(r);
+      });
 
       // キーはあるのに中身が0件 → 読み取り失敗。絶対に「0件」として確定させない
       if (all.length === 0) {
@@ -950,20 +965,31 @@ async function saveHistory(allItems) {
     //   次回起動時に削除したはずの伝票が読み戻されてしまう。
     const emptied = [...knownMonthKeys].filter(k => !monthGroups[k]);
 
-    // 並列ではなく順番に書き込む（Firestoreの制限対策）
+    // ★変わっていない月は書かない。
+    //   1枚スキャンするたびに7か月ぶん（約800KB）を毎回書き直していたため、
+    //   保存が遅く、通信量も無駄になっていた。実際に変わった月だけを書く。
+    const written = [];
     for (const key of docKeys) {
+      const sig = monthSignature(monthGroups[key]);
+      if (lastWrittenMonth[key] === sig) continue;   // 中身が同じなら書かない
       await fsSet(key, monthGroups[key]);
+      lastWrittenMonth[key] = sig;
+      written.push(key);
     }
     for (const key of emptied) {
+      if (lastWrittenMonth[key] === "") continue;   // 既に空にしてあるなら繰り返さない
       await fsSet(key, []);
+      lastWrittenMonth[key] = "";
+      written.push(key + "(空)");
     }
 
-    // インデックス更新
+    // インデックス更新（キーが増えたときだけ）
     const existingIndex = (await fsGet("history_index")) || [];
     const allKeys = [...new Set([...existingIndex, ...docKeys])].sort();
-    await fsSet("history_index", allKeys);
-    logEvent("SAVE", `${docKeys.join(",")} に計${allItems.length}件を書込`
-      + (emptied.length ? ` / 空にした月: ${emptied.join(",")}` : ""));
+    if (allKeys.length !== existingIndex.length) {
+      await fsSet("history_index", allKeys);
+    }
+    logEvent("SAVE", `${written.length ? written.join(",") : "変更なし"} を書込 / 全${allItems.length}件`);
     setKnownCount(allItems.length);   // ★自分の操作による増減はここで記録
     return true;
   } catch(e) {
@@ -1718,7 +1744,7 @@ async function runOCR(base64) {
     setLoadingText("完了！", 100);
 
     const slipNum   = extractSlipNumber(text);
-    const totalRes  = extractTotal(text);          // {value, verified, lineSum}
+    const totalRes  = extractTotal(text, data.responses?.[0]);          // {value, verified, lineSum}
     const total     = totalRes ? totalRes.value : null;
     window._lastTotalRes = totalRes;
     const company   = extractCompany(text);
@@ -1831,9 +1857,71 @@ function sumLineItems(lines, totalLineIdx) {
   return count > 0 ? { sum, count } : null;
 }
 
+// 「合計」ラベルと同じ高さで、その右側にある数字を拾う。
+// 行の並び順に頼らないので、ラベルと金額が別行に分かれても正しく取れる。
+function extractTotalByLayout(resp) {
+  const anns = resp && resp.textAnnotations;
+  if (!Array.isArray(anns) || anns.length < 2) return null;
+
+  const words = anns.slice(1).map(a => {
+    const v = (a.boundingPoly && a.boundingPoly.vertices) || [];
+    if (v.length === 0) return null;
+    const xs = v.map(p => p.x || 0), ys = v.map(p => p.y || 0);
+    return { t: a.description || "",
+             x0: Math.min(...xs), x1: Math.max(...xs),
+             y0: Math.min(...ys), y1: Math.max(...ys) };
+  }).filter(Boolean);
+  if (words.length === 0) return null;
+
+  // 「合計」を探す。1語のことも、「合」「計」に割れることもある
+  let label = words.find(w => /合\s*計/.test(w.t));
+  if (!label) {
+    const gos = words.filter(w => w.t === "合");
+    const keis = words.filter(w => w.t === "計");
+    for (const g of gos) {
+      const gh = Math.max(1, g.y1 - g.y0);
+      const k = keis.find(k =>
+        Math.abs((k.y0 + k.y1) / 2 - (g.y0 + g.y1) / 2) < gh &&
+        k.x0 >= g.x0 && (k.x0 - g.x1) < gh * 3);
+      if (k) {
+        label = { t: "合計", x0: g.x0, x1: k.x1,
+                  y0: Math.min(g.y0, k.y0), y1: Math.max(g.y1, k.y1) };
+        break;
+      }
+    }
+  }
+  if (!label) return null;
+
+  // 同じ高さの帯にあり、ラベルより右にある語だけを左から並べる
+  const cy = (label.y0 + label.y1) / 2;
+  const h = Math.max(1, label.y1 - label.y0);
+  const band = words
+    .filter(w => Math.abs((w.y0 + w.y1) / 2 - cy) <= h * 0.9 && w.x0 > label.x1)
+    .sort((a, b) => a.x0 - b.x0);
+  if (band.length === 0) return null;
+
+  // 「2 , 160」のように割れた数字は、空白を挟んで繋いでから解釈する
+  const joined = band.map(w => w.t).join(" ");
+  const nums = pickAmounts(joined);
+  if (nums.length === 0) return null;
+  return { value: nums[0].value, snippet: joined.slice(0, 120) };
+}
+
 // 戻り値: { value, verified, lineSum }
-function extractTotal(text) {
+function extractTotal(text, resp) {
   const lines = text.split("\n");
+
+  // ★まず位置で拾う。行の並びに頼る方法より確実
+  const byLayout = extractTotalByLayout(resp);
+  if (byLayout) {
+    let lineSum = null;
+    for (let i = 0; i < lines.length; i++) {
+      if (/合\s*計/.test(lines[i])) { const s = sumLineItems(lines, i); if (s) lineSum = s.sum; break; }
+    }
+    window._lastTotalSnippet = byLayout.snippet;
+    return { value: byLayout.value, verified: lineSum === byLayout.value, lineSum };
+  }
+
   for (let i = 0; i < lines.length; i++) {
     if (!/合\s*計/.test(lines[i])) continue;
 
@@ -2379,7 +2467,9 @@ function confirmAndSave() {
     const p = window._ocrProposed;
     if (p) {
       const diffs = [];
-      if (p.slip  !== slipVal)   diffs.push(`伝票 ${p.slip||"(空)"}→${slipVal}`);
+      // 「G」の有無だけの違いは誤読ではない（保存時にGが付くため）
+      const norm = s => String(s||"").replace(/^G/i, "");
+      if (norm(p.slip) !== norm(slipVal)) diffs.push(`伝票 ${p.slip||"(空)"}→${slipVal}`);
       if (p.amt   !== String(amtVal)) diffs.push(`金額 ${p.amt||"(空)"}→${amtVal}`);
       if (p.frame !== frameVal)  diffs.push(`車体 ${p.frame||"(空)"}→${frameVal}`);
       if (diffs.length) {
