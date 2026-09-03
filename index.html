@@ -221,7 +221,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v47</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v50</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -319,8 +319,9 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
             税抜合計
             <span class="ocr-badge" id="amt-ocr-badge">OCR</span>
           </div>
-          <input type="number" class="field-input" id="inp-amt" placeholder="35640" min="0" max="100000" oninput="calcPreview()">
+          <input type="number" class="field-input" id="inp-amt" placeholder="紙の合計を入力" min="0" max="100000" oninput="calcPreview()">
           <div class="field-hint">合計⇒ の右の数字（円）</div>
+          <div id="amt-check-note" style="display:none;margin-top:6px;font-size:12px;line-height:1.6;color:#fbbf24;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:9px"></div>
         </div>
 
         <div id="calc-preview" style="display:none;background:#0d1829;border-radius:10px;padding:12px;margin-top:4px">
@@ -522,6 +523,16 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 </div>
 
 <!-- 重複スキャン警告モーダル -->
+<div class="overlay" id="cdwarn-modal">
+  <div class="modal">
+    <div style="text-align:center;font-size:32px;margin-bottom:8px">📅</div>
+    <div class="modal-title" style="text-align:center;color:#fbbf24">集計日を確認してください</div>
+    <div id="cdwarn-body" style="font-size:13px;line-height:1.9;margin:12px 0 16px"></div>
+    <div id="cdwarn-buttons"></div>
+    <button onclick="closeCdWarn()" style="width:100%;margin-top:8px;padding:12px;background:#1a2942;border:1px solid #2a4070;border-radius:12px;color:#7a9cc8;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">✕ 戻って確認する</button>
+  </div>
+</div>
+
 <div class="overlay" id="dup-modal">
   <div class="modal">
     <div style="text-align:center;font-size:32px;margin-bottom:8px">⚠️</div>
@@ -643,7 +654,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v47";
+const APP_VERSION = "v50";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -919,6 +930,7 @@ async function saveHistory(allItems) {
         }
       }
       if (!fixed) fixed = thisYear + String(cd).slice(4); // 年だけ差し替える
+      // ※ここで直すのは「ありえない年」だけ。月をまたぐ前月分計上には触れない。
       logEvent("CD_FIX", `${item.slip_number}: 集計日 ${cd} → ${fixed}`);
       item.collection_date = fixed;
       item.billing_month = fixed.slice(0,7);
@@ -1545,7 +1557,29 @@ async function renderLogPanel() {
 
   const color = { DROP:"#f87171", SHRINK:"#f87171", SAVE_ERR:"#f87171",
                   RECOVER:"#4ade80", SCAN:"#7a9cc8", DELETE:"#fbbf24",
-                  STARTUP:"#93c5fd" };
+                  STARTUP:"#93c5fd", OCR_MISS:"#fb923c" };
+
+  // ★OCRの誤読が「何枚中何枚」「前半か後半か」を一目で出す。
+  //   連続スキャンの後半で増えるという見立てを、数字で確かめるため。
+  const scans  = all.filter(r => r.type === "SCAN").length;
+  const misses = all.filter(r => r.type === "OCR_MISS");
+  let ocrSummary = "";
+  if (scans > 0 || misses.length > 0) {
+    // 直近の誤読を時刻順に並べ、10分以内に続いたスキャンの何枚目かを見る
+    const byHour = {};
+    misses.forEach(m => {
+      const h = new Date(m.t).getHours();
+      byHour[h] = (byHour[h] || 0) + 1;
+    });
+    const hours = Object.keys(byHour).sort((a,b)=>a-b)
+      .map(h => `${h}時:${byHour[h]}件`).join(" / ");
+    ocrSummary = `<div style="background:#1a1206;border:1px solid #7c2d12;border-radius:10px;padding:11px;margin-bottom:10px">
+      <div style="color:#fb923c;font-weight:800;font-size:12px;margin-bottom:5px">🔍 OCRの誤読（直近3日）</div>
+      <div style="color:#e8edf5;font-size:12px;line-height:1.7">
+        保存 ${scans}枚 のうち <b style="color:#fb923c">${misses.length}枚</b> を手で修正<br>
+        ${hours ? `<span style="color:#7a9cc8;font-size:11px">時間帯: ${hours}</span>` : ""}
+      </div></div>`;
+  }
 
   const rows = all.map(r => {
     const d = new Date(r.t);
@@ -1570,6 +1604,7 @@ async function renderLogPanel() {
           style="background:#2563eb;border:none;border-radius:8px;padding:9px 14px;color:#fff;font-size:12px;font-weight:700;font-family:inherit">保存</button>
       </div>
     </div>
+    ${ocrSummary}
     <div style="display:flex;gap:6px;margin-bottom:8px">
       <button class="btn-sec" style="flex:1;padding:9px;font-size:12px" onclick="renderLogPanel()">🔄 更新</button>
       <button class="btn-sec" style="flex:1;padding:9px;font-size:12px" onclick="copyLog()">📋 コピー</button>
@@ -1633,7 +1668,7 @@ function takePhoto() {
   if (cameraStream) { cameraStream.getTracks().forEach(t=>t.stop()); cameraStream=null; }
   document.getElementById("camera-view").style.display = "none";
 
-  const MAX = 1200;
+  const MAX = 1600;   // ★小さい数字の潰れを防ぐため引き上げ
   let finalCanvas = canvas;
   if (canvas.width > MAX || canvas.height > MAX) {
     const scale = Math.min(MAX / canvas.width, MAX / canvas.height);
@@ -1644,7 +1679,7 @@ function takePhoto() {
     finalCanvas = rc;
   }
 
-  const dataUrl = finalCanvas.toDataURL("image/jpeg", 0.80);
+  const dataUrl = finalCanvas.toDataURL("image/jpeg", 0.92);
   const preview = document.getElementById("preview");
   preview.src = dataUrl;
   document.getElementById("preview-wrap").style.display = "block";
@@ -1669,7 +1704,8 @@ async function runOCR(base64) {
         body: JSON.stringify({
           requests: [{
             image: { content: base64 },
-            features: [{ type: "TEXT_DETECTION", maxResults: 1 }]
+            features: [{ type: "DOCUMENT_TEXT_DETECTION", maxResults: 1 }],
+            imageContext: { languageHints: ["ja"] }
           }]
         })
       }
@@ -1682,7 +1718,9 @@ async function runOCR(base64) {
     setLoadingText("完了！", 100);
 
     const slipNum   = extractSlipNumber(text);
-    const total     = extractTotal(text);
+    const totalRes  = extractTotal(text);          // {value, verified, lineSum}
+    const total     = totalRes ? totalRes.value : null;
+    window._lastTotalRes = totalRes;
     const company   = extractCompany(text);
     const frameNum  = extractFrameNumber(text);
     const issueDate = extractIssueDate(text);
@@ -1758,23 +1796,66 @@ function extractSlipNumber(text) {
   return "";
 }
 
+// 金額らしい数字だけを取り出す。
+// 「26, 190」のようにカンマ前後に空白が入る誤認識だけを詰めて直す。
+// ※以前は空白を全部消していたため「540」と数量の「1」が「5401」に化けていた。
+function normalizeNumberSpacing(s) {
+  return s.replace(/(\d)\s*[,，]\s*(\d)/g, "$1,$2");
+}
+function pickAmounts(s) {
+  const out = [];
+  const re = /\d{1,3}(?:,\d{3})+|\d{3,7}/g;
+  let m;
+  while ((m = re.exec(normalizeNumberSpacing(s))) !== null) {
+    const v = parseInt(m[0].replace(/,/g, ""), 10);
+    if (v >= 100 && v <= 9999999) out.push({ value: v, hasComma: m[0].includes(",") });
+  }
+  return out;
+}
+
+// 明細（金額欄）の合計を自分で足して、読み取った合計と照合するための値
+function sumLineItems(lines, totalLineIdx) {
+  let headerIdx = -1;
+  for (let i = 0; i < totalLineIdx; i++) {
+    if (/金\s*額/.test(lines[i])) { headerIdx = i; break; }
+  }
+  if (headerIdx < 0) return null;
+  let sum = 0, count = 0;
+  for (let i = headerIdx + 1; i < totalLineIdx; i++) {
+    const nums = pickAmounts(lines[i]);
+    if (nums.length === 0) continue;
+    // 金額欄は行の右側。数量(1桁)は3桁未満なので既に除外されている
+    sum += nums[nums.length - 1].value;
+    count++;
+  }
+  return count > 0 ? { sum, count } : null;
+}
+
+// 戻り値: { value, verified, lineSum }
 function extractTotal(text) {
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.includes("合計") || line.includes("合 計")) {
-      // 合計行 + 後ろ3行を結合し、スペース・空白を除去してから数字を探す
-      // 例: "26, 190" → "26,190" → 26190
-      const combined = lines.slice(i, i+4).join(" ").replace(/\s/g, "");
-      // カンマ区切り数字を全部取得
-      const nums = combined.match(/\d{1,3}(?:[,，]\d{3})+|\d{4,}/g);
-      if (nums) {
-        const vals = nums
-          .map(n => parseInt(n.replace(/[,，]/g, "")))
-          .filter(v => v >= 100 && v <= 9999999);
-        if (vals.length > 0) return Math.max(...vals);
-      }
+    if (!/合\s*計/.test(lines[i])) continue;
+
+    // 「合計」より後ろだけを見る。行の先頭にある伝票番号などを拾わないため
+    const after = lines[i].replace(/^[\s\S]*?合\s*計/, "");
+    const check = sumLineItems(lines, i);
+
+    // 同じ行 → 次の行 → その次、の順に探す。最大値ではなく最初に見つかった妥当な数字
+    const zones = [after, lines[i+1] || "", lines[i+2] || ""];
+    const candidates = [];
+    zones.forEach((z, zi) => pickAmounts(z).forEach(n => candidates.push({ ...n, zone: zi })));
+    if (candidates.length === 0) continue;
+
+    window._lastTotalSnippet = (lines[i] || "").trim();   // 誤読時の原因追跡用
+    // 明細の合計と一致するものがあれば、それが正解。検算済みとして扱う
+    if (check) {
+      const hit = candidates.find(n => n.value === check.sum);
+      if (hit) return { value: hit.value, verified: true, lineSum: check.sum };
     }
+    // カンマ付きを優先し、同条件なら「合計」に近い位置のものを選ぶ
+    candidates.sort((a, b) => (b.hasComma - a.hasComma) || (a.zone - b.zone));
+    return { value: candidates[0].value, verified: false, lineSum: check ? check.sum : null };
   }
   return null;
 }
@@ -1838,6 +1919,17 @@ function showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNu
   amtInp.value  = total || "";
   if (frameInp) frameInp.value = frameNum || "";
 
+  // ★OCRが提案した値を控えておく。保存時に人が直した値と突き合わせて、
+  //   外したときだけ記録する（全件残すと容量を圧迫するため）
+  window._ocrProposed = {
+    slip: slipNum || "",
+    amt: total == null ? "" : String(total),
+    frame: frameNum || "",
+    verified: !!(window._lastTotalRes && window._lastTotalRes.verified),
+    lineSum: window._lastTotalRes ? window._lastTotalRes.lineSum : null,
+    snippet: (window._lastTotalSnippet || "").slice(0, 120)
+  };
+
   selectCompanyForm(company || null, true);
 
   const frameBadge = document.getElementById("frame-ocr-badge");
@@ -1864,9 +1956,30 @@ function showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNu
   slipBadge.textContent = slipNum ? "OCR ✓" : "手入力";
   slipBadge.style.background = slipNum ? "rgba(34,197,94,0.2)" : "#1e3050";
   slipBadge.style.color = slipNum ? "#4ade80" : "#5a7aa8";
-  amtBadge.textContent = total ? "OCR ✓" : "手入力";
-  amtBadge.style.background = total ? "rgba(34,197,94,0.2)" : "#1e3050";
-  amtBadge.style.color = total ? "#4ade80" : "#5a7aa8";
+  // ★読み取れたかどうかではなく「明細の足し算と合っているか」を出す。
+  //   合っていない数字を緑の「OCR ✓」で見せると、確認せずに通してしまう。
+  const tr = window._lastTotalRes;
+  if (!total) {
+    amtBadge.textContent = "手入力";
+    amtBadge.style.background = "#1e3050"; amtBadge.style.color = "#5a7aa8";
+  } else if (tr && tr.verified) {
+    amtBadge.textContent = "検算OK ✓";
+    amtBadge.style.background = "rgba(34,197,94,0.2)"; amtBadge.style.color = "#4ade80";
+  } else {
+    amtBadge.textContent = "要確認";
+    amtBadge.style.background = "rgba(245,158,11,0.2)"; amtBadge.style.color = "#fbbf24";
+  }
+  const amtNote = document.getElementById("amt-check-note");
+  if (amtNote) {
+    if (total && tr && !tr.verified) {
+      amtNote.style.display = "block";
+      amtNote.innerHTML = tr.lineSum
+        ? `⚠️ 明細の合計は <b>${tr.lineSum.toLocaleString()}円</b> です。紙と見比べてください。`
+        : `⚠️ 明細と照合できませんでした。紙の「合計⇒」と見比べてください。`;
+    } else {
+      amtNote.style.display = "none";
+    }
+  }
 
   form.style.display = "block";
   calcPreview();
@@ -2111,35 +2224,113 @@ function lockSaveButton(on) {
   if (lbl) lbl.textContent = on ? "保存中…" : "保　存";
 }
 
+
+// ===== 集計日と伝票番号の照合 =====
+// 伝票番号 G+MM+DD+連番 は「伝票の発行日」。集計日は「どの月の請求に入れるか」。
+// 前月分の修正・抜けを翌月に処理するときは、両者がズレるのが正しい。
+function checkCollectionDate() {
+  const slip = document.getElementById("inp-slip").value.trim();
+  const cd = currentCollectionDate;
+  if (!/^\d{8}$/.test(slip) || !cd) return null;
+  const sM = parseInt(slip.slice(0,2),10), sD = parseInt(slip.slice(2,4),10);
+  if (!(sM>=1&&sM<=12&&sD>=1&&sD<=31)) return null;
+
+  const y = cd.getFullYear(), cM = cd.getMonth()+1, cD = cd.getDate();
+  const thisYear = new Date().getFullYear();
+
+  // ありえない年は問答無用で異常
+  if (Math.abs(y - thisYear) > 1) {
+    return { kind:"year", slip, sM, sD, y, cM, cD };
+  }
+  if (sM === cM && sD === cD) return null;   // 一致。何も言わない
+
+  // 伝票の日付と集計日の前後関係を月単位で比べる
+  const slipMonthIdx = sM;
+  const diff = slipMonthIdx - cM;   // 正 = 伝票のほうが後の月（＝前月分に入れている）
+
+  if (diff === 1 || diff === -11) {
+    // 翌月に発行された伝票を前月の集計に入れている ＝ 前月分の修正・抜け（正常な運用）
+    return { kind:"backfill", slip, sM, sD, y, cM, cD };
+  }
+  if (diff < 0 || diff <= -2) {
+    // 伝票のほうが前の月なのに、後の月の集計に入っている ＝ 請求から抜け落ちる事故
+    return { kind:"late", slip, sM, sD, y, cM, cD };
+  }
+  // 同じ月で日付だけ違う
+  return { kind:"sameMonth", slip, sM, sD, y, cM, cD };
+}
+
+let _cdWarnCtx = null;
+function showCdWarn(ctx) {
+  _cdWarnCtx = ctx;
+  const b = document.getElementById("cdwarn-body");
+  const btns = document.getElementById("cdwarn-buttons");
+  const slipDate = `${ctx.sM}月${ctx.sD}日`;
+  const cdDate = `${ctx.y}年${ctx.cM}月${ctx.cD}日`;
+
+  const rows = `
+    <div style="background:#111f38;border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="color:#7a9cc8;font-size:11px">伝票番号 G${ctx.slip}（発行日）</div>
+      <div style="color:#e8edf5;font-size:16px;font-weight:800;margin-bottom:8px">${slipDate}</div>
+      <div style="color:#7a9cc8;font-size:11px">いまの集計日（どの月の請求に入れるか）</div>
+      <div style="color:#fbbf24;font-size:16px;font-weight:800">${cdDate}</div>
+    </div>`;
+
+  if (ctx.kind === "backfill") {
+    b.innerHTML = rows + `<div style="color:#4ade80">${ctx.sM}月に出た伝票を、<b>${ctx.cM}月分の請求</b>に入れようとしています。<br>前月分の修正・抜けの処理であれば、このままで正しいです。</div>`;
+    btns.innerHTML = `
+      <button onclick="cdWarnKeep()" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px">✅ ${ctx.cM}月分のままで保存する</button>
+      <button onclick="cdWarnFix()" style="width:100%;padding:12px;background:#1a2942;border:1px solid #2a4070;border-radius:12px;color:#e8edf5;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">${slipDate}（伝票の日付）に直す</button>`;
+  } else if (ctx.kind === "late") {
+    b.innerHTML = rows + `<div style="color:#f87171"><b>⚠️ ${ctx.sM}月の伝票が${ctx.cM}月分に入ろうとしています。</b><br>このまま保存すると${ctx.sM}月の請求から抜け落ちます。日付の設定ミスの可能性が高いです。</div>`;
+    btns.innerHTML = `
+      <button onclick="cdWarnFix()" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px">✅ ${slipDate} に直して保存する</button>
+      <button onclick="cdWarnKeep()" style="width:100%;padding:12px;background:#3a1a1a;border:1px solid #7f1d1d;border-radius:12px;color:#f87171;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">承知のうえ ${ctx.cM}月分で保存する</button>`;
+  } else if (ctx.kind === "year") {
+    b.innerHTML = rows + `<div style="color:#f87171"><b>⚠️ ${ctx.y}年は正しくありません。</b><br>読み取りの誤りです。伝票の日付に直してください。</div>`;
+    btns.innerHTML = `
+      <button onclick="cdWarnFix()" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">✅ ${slipDate} に直して保存する</button>`;
+  } else {
+    b.innerHTML = rows + `<div style="color:#e8edf5">同じ${ctx.sM}月ですが、日付が違います。<br>請求月は変わらないので、どちらでも金額の集計に影響はありません。</div>`;
+    btns.innerHTML = `
+      <button onclick="cdWarnKeep()" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px">✅ ${ctx.cD}日のままで保存する</button>
+      <button onclick="cdWarnFix()" style="width:100%;padding:12px;background:#1a2942;border:1px solid #2a4070;border-radius:12px;color:#e8edf5;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">${slipDate}（伝票の日付）に直す</button>`;
+  }
+  document.getElementById("cdwarn-modal").classList.add("show");
+}
+function closeCdWarn() {
+  document.getElementById("cdwarn-modal").classList.remove("show");
+  isSaving = false; lockSaveButton(false);
+}
+function cdWarnFix() {
+  const ctx = _cdWarnCtx;
+  const y = (ctx.sM > new Date().getMonth()+2) ? new Date().getFullYear()-1 : new Date().getFullYear();
+  currentCollectionDate = new Date(y, ctx.sM-1, ctx.sD);
+  updateCdBadge(false);
+  logEvent("CD_FIX", `G${ctx.slip} の集計日を ${y}/${ctx.sM}/${ctx.sD} に修正`);
+  document.getElementById("cdwarn-modal").classList.remove("show");
+  _cdApproved = true; confirmAndSave();
+}
+function cdWarnKeep() {
+  const ctx = _cdWarnCtx;
+  _cdIntentional = (ctx.kind === "backfill");   // 前月分として意図的に入れた印
+  logEvent("CD_KEEP", `G${ctx.slip} を ${ctx.y}/${ctx.cM}/${ctx.cD} のまま保存（${ctx.kind}）`);
+  document.getElementById("cdwarn-modal").classList.remove("show");
+  _cdApproved = true; confirmAndSave();
+}
+let _cdApproved = false;
+let _cdIntentional = false;
+
 function confirmAndSave() {
   if (isSaving) return; // ★二重実行を遮断
   if (blockIfReadOnly()) return;
 
-  // ★伝票番号は日付を含む（G + MM + DD + 連番）。集計日と食い違っていたら止める。
-  //   2036年8月や、8/26の伝票が9月に入るといった取り違えを保存前に捕まえる。
-  const _slip = document.getElementById("inp-slip").value.trim();
-  const _cd   = currentCollectionDate;
-  if (/^\d{8}$/.test(_slip) && _cd) {
-    const sM = parseInt(_slip.slice(0,2),10), sD = parseInt(_slip.slice(2,4),10);
-    const cM = _cd.getMonth()+1, cD = _cd.getDate();
-    const yearOK = Math.abs(_cd.getFullYear() - new Date().getFullYear()) <= 1;
-    if (sM>=1 && sM<=12 && sD>=1 && sD<=31 && (sM!==cM || sD!==cD || !yearOK)) {
-      const msg = `⚠️ 集計日が伝票番号と一致しません\n\n`
-        + `伝票番号 G${_slip} → ${sM}月${sD}日の伝票\n`
-        + `いま設定されている集計日 → ${_cd.getFullYear()}年${cM}月${cD}日\n\n`
-        + `「OK」で ${sM}月${sD}日 に直して保存します。\n`
-        + `「キャンセル」で戻って自分で確認します。`;
-      if (confirm(msg)) {
-        const y = (sM > (new Date().getMonth()+1) + 1)
-          ? new Date().getFullYear() - 1   // 年末年始をまたぐ場合
-          : new Date().getFullYear();
-        currentCollectionDate = new Date(y, sM-1, sD);
-        updateCdBadge(false);
-        logEvent("CD_FIX", `G${_slip} の集計日を ${y}/${sM}/${sD} に自動修正`);
-      } else {
-        return;
-      }
-    }
+  // ★伝票番号は日付を含む（G + MM + DD + 連番）。ただし集計日と一致するとは限らない。
+  //   8月分の修正・抜けを9月に処理する場合、9月発行の伝票を8月の集計に入れるのが正しい。
+  //   ズレの「向き」で意味が変わるため、それぞれ別の扱いにする。
+  if (!_cdApproved) {
+    const _cdCheck = checkCollectionDate();
+    if (_cdCheck) { showCdWarn(_cdCheck); return; }
   }
 
   const slipDigits = document.getElementById("inp-slip").value.trim();
@@ -2177,8 +2368,33 @@ function confirmAndSave() {
   const lastDay = new Date(cd.getFullYear(), cd.getMonth()+1, 0);
   lastDay.setHours(23,59,59,0);
 
+  // ★「前月分として入れた」と本人が選んだ記録には印を付け、
+  //   あとから一覧で見たときに間違いと区別できるようにする
+  const _intentional = _cdIntentional;
+  _cdApproved = false; _cdIntentional = false;
+
+  // ★OCRが外した場合だけ記録する。人が直した値が正解なので、
+  //   「何と読んで、何に直されたか」が残れば原因を追える。
+  try {
+    const p = window._ocrProposed;
+    if (p) {
+      const diffs = [];
+      if (p.slip  !== slipVal)   diffs.push(`伝票 ${p.slip||"(空)"}→${slipVal}`);
+      if (p.amt   !== String(amtVal)) diffs.push(`金額 ${p.amt||"(空)"}→${amtVal}`);
+      if (p.frame !== frameVal)  diffs.push(`車体 ${p.frame||"(空)"}→${frameVal}`);
+      if (diffs.length) {
+        logEvent("OCR_MISS", diffs.join(" / ")
+          + (p.lineSum ? ` [明細計${p.lineSum}]` : "")
+          + (p.verified ? " [検算OK]" : "")
+          + (p.snippet ? ` 合計行「${p.snippet}」` : ""));
+      }
+      window._ocrProposed = null;
+    }
+  } catch(e) {}
+
   const entry = {
     id: Date.now(),
+    intentional_backfill: _intentional || false,
     scanned_at: lastDay.toISOString(),
     real_scanned_at: (realScanTime || new Date()).toISOString(),
     collection_date: cdKey,
@@ -2580,15 +2796,23 @@ function renderHistory() {
         const dups = slipMap[item.slip_number];
         const isDup = dups && dups.length > 1;
         // 伝票番号の日付と集計日のズレを検出（G+MM+DD+連番）
-        let cdMismatch = null;
+        let cdMismatch = null, cdBackfill = null;
         {
           const sn = String(item.slip_number||"").replace(/^G/,"");
           const cdv = item.collection_date;
           if (/^\d{8}$/.test(sn) && cdv) {
             const sM=parseInt(sn.slice(0,2),10), sD=parseInt(sn.slice(2,4),10);
             const p=cdv.split("-").map(Number);
-            if (sM>=1&&sM<=12&&sD>=1&&sD<=31 && (p[1]!==sM||p[2]!==sD||Math.abs(p[0]-new Date().getFullYear())>1)) {
-              cdMismatch = `${sM}/${sD}`;
+            if (sM>=1&&sM<=12&&sD>=1&&sD<=31 && !(p[1]===sM&&p[2]===sD)) {
+              const diff = sM - p[1];
+              if (Math.abs(p[0]-new Date().getFullYear())>1) {
+                cdMismatch = `${sM}/${sD}`;              // ありえない年
+              } else if (diff === 1 || diff === -11) {
+                // 翌月発行の伝票を前月分に入れている＝前月分の修正。異常ではない
+                cdBackfill = `${sM}/${sD}`;
+              } else if (diff < 0) {
+                cdMismatch = `${sM}/${sD}`;              // 請求月から抜け落ちる向き
+              }
             }
           }
         }
@@ -2616,10 +2840,12 @@ function renderHistory() {
                   ${isReplaced ? '<span style="font-size:9px;background:#d97706;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">差替済</span>' : ""}
                   ${isDup&&!isReplaced ? '<span style="font-size:9px;background:#c0392b;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">⚠️重複</span>' : ""}
                   ${cdMismatch ? `<span style="font-size:9px;background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">📅日付ズレ</span>` : ""}
+                  ${cdBackfill ? `<span style="font-size:9px;background:#155e75;color:#a5f3fc;border-radius:4px;padding:1px 5px;margin-left:4px">前月分</span>` : ""}
                 </div>
                 <div class="hist-time" style="color:#7a9cc8;font-size:10px">${scanDateDisp}<span class="hist-tax-badge">税${item.tax_rate}%</span></div>
                 ${item.frame_number ? `<div style="font-size:10px;color:#7a9cc8;margin-top:1px">🚗 ${item.frame_number}</div>` : ""}
-                ${cdMismatch ? `<div style="font-size:10px;color:#a78bfa;margin-top:2px">伝票番号は ${cdMismatch} の日付です</div>` : ""}
+                ${cdMismatch ? `<div style="font-size:10px;color:#a78bfa;margin-top:2px">⚠️ 伝票番号は ${cdMismatch} の日付です</div>` : ""}
+                ${cdBackfill ? `<div style="font-size:10px;color:#67e8f9;margin-top:2px">${cdBackfill} の伝票を前月分に計上</div>` : ""}
                 ${isReplaced ? `<div style="font-size:10px;color:#d97706;margin-top:2px">差替前: ${fmt(item.replaced_from)}円 → ${fmt(item.total_excl_tax)}円</div>` : ""}
               </div>
             </div>
