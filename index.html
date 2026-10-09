@@ -221,7 +221,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v52</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v53</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -292,6 +292,11 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
               <div id="drum-day" style="position:absolute;width:100%;transition:transform 0.2s;cursor:ns-resize;user-select:none"></div>
             </div>
           </div>
+          <div style="display:flex;gap:6px;margin-bottom:6px">
+            <button type="button" onclick="stepWorkDate(-1)" style="flex:2;padding:11px 8px;background:#1a2942;border:1px solid #2a4070;border-radius:8px;color:#e8edf5;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">◀ 前の稼働日</button>
+            <button type="button" onclick="stepWorkDate(1)" style="flex:1;padding:11px 8px;background:#121d33;border:1px solid #223556;border-radius:8px;color:#7a9cc8;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">次 ▶</button>
+          </div>
+          <div id="cd-step-note" style="display:none;font-size:11px;color:#67e8f9;margin-bottom:4px"></div>
           <div style="font-size:11px;color:#5a7aa8">発行日ベース（予定表の日付）で入力してください</div>
           <div id="scan-datetime-disp" style="font-size:11px;color:#7a9cc8;margin-top:4px">📷 スキャン日時：—</div>
         </div>
@@ -654,7 +659,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v52";
+const APP_VERSION = "v53";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -2022,6 +2027,9 @@ function showInputForm(slipNum, total, company, issueDate, issueDateOCR, frameNu
 
   // ★OCRが提案した値を控えておく。保存時に人が直した値と突き合わせて、
   //   外したときだけ記録する（全件残すと容量を圧迫するため）
+  const _note = document.getElementById("cd-step-note");
+  if (_note) _note.style.display = "none";
+
   window._ocrProposed = {
     slip: slipNum || "",
     amt: total == null ? "" : String(total),
@@ -2110,6 +2118,54 @@ function buildMonthList() {
 }
 
 const ITEM_H = 44;
+
+
+// ── 稼働日ベースの日付送り ────────────────────────────────────────────────
+// 曜日では判断しない。実際に記録がある集計日＝稼働した日なので、
+// 履歴に存在する日付だけを辿る。休んだ日は自然に飛ばされる。
+function workDateList() {
+  const set = new Set();
+  (history || []).forEach(h => { if (h.collection_date) set.add(h.collection_date); });
+  return [...set].sort();   // 昇順 YYYY-MM-DD
+}
+function ymd(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function stepWorkDate(dir) {
+  if (!currentCollectionDate) return;
+  const cur = ymd(currentCollectionDate);
+  const list = workDateList();
+  let target = null;
+
+  if (dir < 0) {
+    for (let i = list.length - 1; i >= 0; i--) { if (list[i] < cur) { target = list[i]; break; } }
+  } else {
+    for (let i = 0; i < list.length; i++) { if (list[i] > cur) { target = list[i]; break; } }
+  }
+
+  const note = document.getElementById("cd-step-note");
+  if (!target) {
+    // 記録が無い方向。素直に1日ずらす
+    const d = new Date(currentCollectionDate);
+    d.setDate(d.getDate() + (dir < 0 ? -1 : 1));
+    currentCollectionDate = d;
+    if (note) {
+      note.style.display = "block";
+      note.style.color = "#fbbf24";
+      note.textContent = `記録のある日が${dir<0?"これより前に":"この先に"}ありません。1日ずらしました`;
+    }
+  } else {
+    const p = target.split("-").map(Number);
+    currentCollectionDate = new Date(p[0], p[1]-1, p[2]);
+    const count = (history || []).filter(h => h.collection_date === target).length;
+    if (note) {
+      note.style.display = "block";
+      note.style.color = "#67e8f9";
+      note.textContent = `${p[1]}月${p[2]}日（この日の記録 ${count}枚）`;
+    }
+  }
+  initDrum(currentCollectionDate, false);
+}
 
 function initDrum(date, isOCR) {
   const monthList = buildMonthList();
