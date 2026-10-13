@@ -81,10 +81,10 @@ const VISION_API_KEY = "AIzaSyBPS5kc6S5n-gOTYghpfSc1W_nO0zZILzM";
 body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;min-height:100vh;display:flex;flex-direction:column;max-width:480px;margin:0 auto;overflow-x:hidden}
 
 .header{background:linear-gradient(135deg,#0f2040,#1a3560);border-bottom:1px solid #2a4070;padding:12px 16px;position:sticky;top:0;z-index:10}
-.header-inner{display:flex;align-items:center;gap:10}
+.header-inner{display:flex;align-items:center;gap:10px}
 .logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#2563eb,#f0c744);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#fff;flex-shrink:0}
-.app-title{font-size:17px;font-weight:800;flex:1}
-.total-badge{text-align:right;background:rgba(240,199,68,0.1);border:1px solid rgba(240,199,68,0.3);border-radius:10px;padding:5px 12px;min-width:90px}
+.app-title{font-size:17px;font-weight:800;flex:1;min-width:0}
+.total-badge{text-align:right;background:rgba(240,199,68,0.1);border:1px solid rgba(240,199,68,0.3);border-radius:10px;padding:5px 12px;min-width:90px;flex-shrink:0;white-space:nowrap}
 .total-num{font-size:18px;font-weight:900;color:#f0c744;line-height:1}
 .total-unit{font-size:9px;color:#a8935a}
 .total-amt{font-size:11px;color:#a8935a;margin-top:2px}
@@ -221,12 +221,13 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v55</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div><div id="last-write" style="display:none;font-size:11px;padding:6px 10px;border-radius:8px;margin-top:4px"></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v56</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
     </div>
   </div>
+  <div id="last-write" style="display:none;font-size:11px;padding:5px 8px;border-radius:7px;margin-top:8px;line-height:1.5"></div>
 </div>
 
 <div class="tabbar">
@@ -659,7 +660,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v55";
+const APP_VERSION = "v56";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
