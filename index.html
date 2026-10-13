@@ -221,7 +221,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v54</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v55</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div><div id="last-write" style="display:none;font-size:11px;padding:6px 10px;border-radius:8px;margin-top:4px"></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -659,7 +659,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v54";
+const APP_VERSION = "v55";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -815,6 +815,7 @@ async function loadAllHistory() {
       }
 
       historyLoaded = true;
+      myDataAsOf = new Date().toISOString();   // この時点のデータを持っている
       return all.sort((a,b) => new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at));
 
     } catch(e) {
@@ -848,6 +849,7 @@ function toggleReadOnly() {
   try { localStorage.setItem("read_only", readOnly ? "1" : "0"); } catch(e) {}
   applyReadOnly();
   logEvent("MODE", readOnly ? "閲覧専用モードに変更" : "編集モードに変更");
+  if (readOnly) fetchLastWrite(); else renderLastWrite();   // 表示も切り替える
   showToastMsg(readOnly ? "👁 閲覧専用モードにしました" : "✏️ 編集モードにしました");
 }
 
@@ -995,6 +997,7 @@ async function saveHistory(allItems) {
       await fsSet("history_index", allKeys);
     }
     logEvent("SAVE", `${written.length ? written.join(",") : "変更なし"} を書込 / 全${allItems.length}件`);
+    myDataAsOf = new Date().toISOString();   // 自分の書き込みで遅れ扱いにならないように
     setKnownCount(allItems.length);   // ★自分の操作による増減はここで記録
     return true;
   } catch(e) {
@@ -1146,6 +1149,7 @@ async function init() {
     showLoadError();
   } finally {
     window._bootDone = true;
+    startLastWriteWatch();
     clearTimeout(window._bootWatchdog);
     // ★起動が終わったら、遅延の警告バナーは自動で消す
     const w = document.getElementById("boot-warn");
@@ -2165,6 +2169,63 @@ function stepWorkDate(dir) {
     }
   }
   initDrum(currentCollectionDate, false);
+}
+
+
+// ── 最終書き込み日時の表示（閲覧専用で見ているときだけ）──────────────────
+// スキャン担当の端末では動かさない。入力中に画面が動くのを避けるため。
+const WRITE_TYPES = ["SCAN","SAVE","DELETE","EDIT","UNDO","REPLACE","MOVE","CD_BULK_FIX","SAVE_ALL","RESTORE"];
+let lastWriteAt = null;
+let myDataAsOf  = null;
+
+async function fetchLastWrite() {
+  if (!readOnly) return;            // 登録担当の端末では何もしない
+  try {
+    const now = new Date();
+    let newest = null, who = "";
+    for (let i = 0; i < 2; i++) {
+      const d = new Date(now.getTime() - i * 86400000);
+      const key = `log_${d.getFullYear()}_${String(d.getMonth()+1).padStart(2,"0")}_${String(d.getDate()).padStart(2,"0")}`;
+      const rows = await fsGetServer(key).catch(() => null);
+      if (!Array.isArray(rows)) continue;
+      rows.forEach(r => {
+        if (!WRITE_TYPES.includes(r.type)) return;
+        if (!newest || new Date(r.t) > new Date(newest)) { newest = r.t; who = r.name || r.dev || ""; }
+      });
+      if (newest) break;
+    }
+    if (newest) { lastWriteAt = newest; window._lastWriteWho = who; }
+  } catch(e) {}
+  renderLastWrite();
+}
+
+function renderLastWrite() {
+  const el = document.getElementById("last-write");
+  if (!el) return;
+  if (!readOnly || !lastWriteAt) { el.style.display = "none"; return; }
+  el.style.display = "block";
+
+  const t = new Date(lastWriteAt);
+  const hhmm = `${t.getMonth()+1}/${t.getDate()} ${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}`;
+  const who = window._lastWriteWho ? ` ${window._lastWriteWho}` : "";
+  const behind = myDataAsOf && new Date(lastWriteAt) > new Date(myDataAsOf);
+
+  if (behind) {
+    el.style.background = "rgba(245,158,11,0.12)";
+    el.innerHTML = `<span style="color:#fbbf24;font-weight:700">⚠️ ${hhmm}${who} に新しい登録があります</span>
+      <button onclick="location.reload()" style="margin-left:8px;background:#f0c744;color:#0a1424;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;font-family:inherit">🔄 読み込む</button>`;
+  } else {
+    el.style.background = "transparent";
+    el.innerHTML = `<span style="color:#5a7aa8">最終書き込み ${hhmm}${who}</span>`;
+  }
+}
+
+function startLastWriteWatch() {
+  fetchLastWrite();
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) fetchLastWrite();
+  });
+  setInterval(() => { if (!document.hidden) fetchLastWrite(); }, 120000);
 }
 
 function initDrum(date, isOCR) {
