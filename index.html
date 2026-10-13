@@ -221,7 +221,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v53</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v54</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -659,7 +659,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v53";
+const APP_VERSION = "v54";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -2639,7 +2639,7 @@ async function saveEntry(entry) {
     window._appHistory = history;
     isSaving = false;
     lockSaveButton(false);
-    return;
+    return false;   // ★呼び出し元が成功と誤認しないよう、必ず結果を返す
   }
   document.getElementById("input-form").style.display = "none";
   document.getElementById("preview-wrap").style.display = "none";
@@ -2664,6 +2664,23 @@ async function saveEntry(entry) {
   updateHeader(); updateRecentBar(); renderHistory();
   isSaving = false;
   lockSaveButton(false);
+  return true;
+}
+
+
+// 保存に失敗したときに画面を元へ戻すための共通処理。
+// 書き込み結果を確かめずに画面だけ更新すると、消えた・直ったように見えて
+// 開き直すと元通り、という最もわかりにくい壊れ方になる。
+async function saveAndVerify(snapshot, failMsg) {
+  const ok = await saveHistory(history);
+  if (!ok) {
+    history = snapshot;
+    window._appHistory = history;
+    updateHeader(); updateRecentBar(); renderHistory(); updateStats();
+    alert(failMsg + "\n\n通信状況を確認して、もう一度お試しください。");
+    return false;
+  }
+  return true;
 }
 
 async function undoLastEntry() {
@@ -2673,9 +2690,10 @@ async function undoLastEntry() {
     new Date(b.real_scanned_at||b.scanned_at) - new Date(a.real_scanned_at||a.scanned_at)
   )[0];
   if (!confirm(`「${last.slip_number}」の保存を取り消しますか？`)) return;
-  logEvent("UNDO", `${last.slip_number} の保存を取り消し`);
+  const snapshot = history.map(h => ({...h}));
   history = history.filter(h => h.id !== last.id);
-  saveHistory(history);
+  if (!await saveAndVerify(snapshot, "保存の取り消しができませんでした。")) return;
+  logEvent("UNDO", `${last.slip_number} の保存を取り消し`);
   document.getElementById("result-section").style.display = "none";
   updateHeader(); updateRecentBar(); renderHistory();
 }
@@ -2687,7 +2705,9 @@ function closeDupModal() {
   lockSaveButton(false);
 }
 
-function confirmDupReplace() {
+async function confirmDupReplace() {
+  // 失敗時に戻せるよう、差し替える前の状態を控える
+  const snapshot = history.map(h => ({...h}));
   if (blockIfReadOnly()) return;
   if (!pendingEntry) return;
   const p = pendingEntry;
@@ -2708,7 +2728,21 @@ function confirmDupReplace() {
   }
   document.getElementById("dup-modal").classList.remove("show");
   pendingEntry = null;
-  saveHistory(history);
+
+  // ★書き込みの結果を必ず待って確かめる。
+  //   以前は await せずに画面を閉じてカメラを再起動していたため、
+  //   保存に失敗しても差し替えが済んだように見えてしまった。
+  const ok = await saveHistory(history);
+  if (!ok) {
+    history = snapshot;              // 画面上の差し替えも取り消す
+    window._appHistory = history;
+    updateHeader(); updateRecentBar(); renderHistory();
+    isSaving = false;
+    lockSaveButton(false);
+    alert("差し替えを保存できませんでした。\n\n通信状況を確認して、もう一度お試しください。");
+    return;
+  }
+  logEvent("REPLACE", `${old.slip_number} を差し替え（${old.replaced_from ?? "—"}円 → ${old.total_excl_tax}円）`);
   updateHeader(); updateRecentBar(); renderHistory();
   document.getElementById("input-form").style.display = "none";
   isSaving = false;
@@ -2724,8 +2758,9 @@ async function saveAsSeparateEntry() {
   entry.dup_allowed = true; // PC管理画面で見分けられるよう印を付けておく
   pendingEntry = null;
   document.getElementById("dup-modal").classList.remove("show");
-  await saveEntry(entry);
-  showToastMsg("✅ 別の伝票として保存しました（番号の重複あり）");
+  const ok = await saveEntry(entry);
+  // ★失敗したのに「保存しました」と出さない
+  if (ok) showToastMsg("✅ 別の伝票として保存しました（番号の重複あり）");
 }
 
 function retake() {
@@ -3236,15 +3271,17 @@ function closeReplaceModal() {
   document.getElementById("replace-modal").classList.remove("show");
   replaceTargetId = null; replaceNewAmt = null;
 }
-function confirmReplace() {
+async function confirmReplace() {
   const item = history.find(h=>h.id===replaceTargetId);
   if(!item || replaceNewAmt===null) return;
+  const snapshot = history.map(h => ({...h}));
   const oldAmt = item.total_excl_tax;
   item.replaced_from = item.replaced_from ?? oldAmt;
   item.total_excl_tax = replaceNewAmt;
   item.tax = Math.round(replaceNewAmt * item.tax_rate / 100);
   item.incl = replaceNewAmt + item.tax;
-  saveHistory(history);
+  if (!await saveAndVerify(snapshot, "金額の差し替えを保存できませんでした。")) { closeReplaceModal(); return; }
+  logEvent("REPLACE", `${item.slip_number} ${oldAmt}円 → ${replaceNewAmt}円`);
   closeReplaceModal();
   updateHeader(); updateRecentBar(); renderHistory(); updateStats();
 }
@@ -3349,10 +3386,11 @@ function closeEditModal() {
   editTargetId = null;
 }
 
-function confirmEdit() {
+async function confirmEdit() {
   if (blockIfReadOnly()) { closeEditModal(); return; }
   const item = history.find(h=>h.id===editTargetId);
   if(!item) return;
+  const _editSnapshot = history.map(h => ({...h}));
   const digits = String(document.getElementById("edit-slip").value).trim();
   const amt = parseInt(document.getElementById("edit-amt").value);
   const frameVal = (document.getElementById("edit-frame")?.value || "").trim();
@@ -3376,7 +3414,8 @@ function confirmEdit() {
   lastDay.setHours(23,59,59,0);
   item.scanned_at = lastDay.toISOString();
 
-  saveHistory(history);
+  if (!await saveAndVerify(_editSnapshot, "編集内容を保存できませんでした。")) { closeEditModal(); return; }
+  logEvent("EDIT", `${item.slip_number} を編集（集計日 ${item.collection_date}）`);
   closeEditModal();
   updateHeader(); updateRecentBar(); renderHistory(); updateStats();
 }
