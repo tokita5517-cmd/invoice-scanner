@@ -204,6 +204,16 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 .howto-note{margin-top:10px;font-size:12px;color:#4ade80;font-weight:600}
 
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:100;padding:24px}
+#print-area{display:none}
+@media print{
+  /* 画面用の背景色と幅の制限を解除しないと、紺色が刷られ伝票も小さくなる */
+  html,body{background:#fff !important;color:#000 !important;max-width:none !important;
+            width:auto !important;min-height:0 !important;display:block !important;
+            margin:0 !important;padding:0 !important;overflow:visible !important}
+  body > *{display:none !important}
+  #print-area{display:block !important;width:100% !important;margin:0 !important;padding:0 !important}
+  #print-area img{width:100% !important;height:auto !important;max-width:100% !important}
+}
 .overlay.show{display:flex}
 .modal{background:#111f38;border:1px solid #2a4070;border-radius:16px;padding:28px 24px;width:100%;max-width:340px;max-height:calc(100vh - 48px);overflow-y:auto;-webkit-overflow-scrolling:touch}
 .modal-title{font-size:17px;font-weight:700;margin-bottom:8px}
@@ -221,7 +231,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v56</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v60</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -233,6 +243,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="tabbar">
   <button class="tab active" onclick="switchTab('scan')" id="tab-scan">📷 スキャン</button>
   <button class="tab" onclick="switchTab('history')" id="tab-history">📋 履歴 <span class="badge" id="hist-badge" style="display:none">0</span></button>
+  <button class="tab" onclick="switchTab('pending')" id="tab-pending">⏳ 発行待ち <span class="badge" id="pend-badge" style="display:none;background:#d97706">0</span></button>
   <button class="tab" onclick="switchTab('settings')" id="tab-settings">⚙️ 設定</button>
 </div>
 
@@ -240,6 +251,8 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
   <!-- SCAN -->
   <div class="page active" id="page-scan">
+    <div id="pend-banner" onclick="openPendingPopup(false)"
+      style="display:none;border:1px solid;border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer"></div>
     <canvas id="capture-canvas" style="display:none"></canvas>
 
     <div id="camera-view" style="display:none;position:fixed;inset:0;z-index:20;background:#000;flex-direction:column">
@@ -449,6 +462,45 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
   </div>
 
   <!-- SETTINGS -->
+  <div class="page" id="page-pending">
+    <div style="background:#0d1829;border:1px solid #1e3050;border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:800;color:#e8edf5;margin-bottom:4px">⏳ 注文書の発行待ち</div>
+      <div style="font-size:11px;color:#7a9cc8;line-height:1.7">
+        注文書がまだ無い車両を登録しておくと、発行された注文書をスキャンした時点で<b style="color:#4ade80">自動で消えます</b>。
+      </div>
+    </div>
+
+    <div id="pend-list"></div>
+
+    <div id="pend-add-box" style="background:#0d1829;border:1px solid #1e3050;border-radius:12px;padding:14px;margin-top:14px">
+      <div style="font-size:12px;font-weight:800;color:#e8edf5;margin-bottom:10px">＋ 発行待ちに追加</div>
+
+      <div style="font-size:11px;color:#7a9cc8;margin-bottom:4px">フレーム番号（作業依頼書の大きい数字）</div>
+      <input type="text" inputmode="numeric" id="pd-frame" placeholder="0394412" maxlength="12"
+        style="width:100%;background:#111f38;border:1px solid #2a4070;border-radius:9px;padding:13px;color:#e8edf5;font-size:20px;font-weight:800;letter-spacing:2px;font-family:inherit;box-sizing:border-box">
+
+      <div style="font-size:11px;color:#7a9cc8;margin:10px 0 4px">販売店</div>
+      <select id="pd-co" style="width:100%;background:#111f38;border:1px solid #2a4070;border-radius:9px;padding:12px;color:#e8edf5;font-size:14px;font-family:inherit;box-sizing:border-box">
+        <option value="">（未選択）</option>
+        <option value="chiba">千葉トヨタ</option>
+        <option value="nets">ネッツトヨタ</option>
+      </select>
+
+      <div style="font-size:11px;color:#7a9cc8;margin:10px 0 4px">メモ（任意）</div>
+      <input type="text" id="pd-note" placeholder="例：渡邊様 ノア 畑町店" maxlength="60"
+        style="width:100%;background:#111f38;border:1px solid #2a4070;border-radius:9px;padding:12px;color:#e8edf5;font-size:14px;font-family:inherit;box-sizing:border-box">
+
+      <div style="font-size:11px;color:#7a9cc8;margin:10px 0 4px">緑伝票の写真（任意）</div>
+      <label style="display:block;width:100%;background:#1e3050;border:1px solid #2a4070;border-radius:9px;padding:13px;color:#9fc0e8;font-size:14px;font-weight:700;text-align:center;box-sizing:border-box">
+        📷 緑伝票を撮影する
+        <input type="file" accept="image/*" capture="environment" onchange="onPendingPhotoPicked(event)" style="display:none">
+      </label>
+      <div id="pd-photo-state" style="display:none;font-size:11px;margin-top:6px"></div>
+
+      <button onclick="addPending()" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);border:none;border-radius:11px;color:#fff;font-size:15px;font-weight:800;font-family:inherit">＋ 発行待ちに追加</button>
+    </div>
+  </div>
+
   <div class="page" id="page-settings">
     <div class="settings-card">
       <div class="settings-title">☁️ クラウド同期</div>
@@ -529,6 +581,32 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 </div>
 
 <!-- 重複スキャン警告モーダル -->
+<div id="print-area"></div>
+
+<div class="overlay" id="pend-popup">
+  <div class="modal">
+    <div style="text-align:center;font-size:28px;margin-bottom:6px">⏳</div>
+    <div class="modal-title" style="text-align:center;color:#fbbf24;margin-bottom:14px" id="pendpop-title">未発行</div>
+    <div id="pendpop-body"></div>
+    <button id="pendpop-close" onclick="closePendingPopup()" style="width:100%;margin-top:6px;padding:12px;background:#1a2942;border:1px solid #2a4070;border-radius:12px;color:#7a9cc8;font-size:14px;font-weight:700;font-family:inherit">✕ 閉じる</button>
+  </div>
+</div>
+
+<div class="overlay" id="photo-viewer" style="padding:12px;z-index:120">
+  <div style="width:100%;max-width:560px;max-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch">
+    <div style="display:flex;align-items:center;margin-bottom:8px">
+      <div id="gs-title" style="font-size:14px;font-weight:800;color:#e8edf5">📗 緑伝票</div>
+      <div style="flex:1"></div>
+      <button onclick="closeGreenSlip()" style="background:#1a2942;border:1px solid #2a4070;border-radius:8px;padding:8px 14px;color:#e8edf5;font-size:13px;font-weight:700;font-family:inherit">✕ 閉じる</button>
+    </div>
+    <div id="gs-actions" style="display:none;gap:6px;margin-bottom:10px">
+      <button onclick="shareGreenSlip()" style="flex:2;background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;border-radius:10px;padding:13px;color:#fff;font-size:14px;font-weight:800;font-family:inherit">⬆️ 印刷・保存・送信</button>
+      <button onclick="printGreenSlip()" style="flex:1;background:#1e3050;border:1px solid #2a4070;border-radius:10px;padding:13px;color:#9fc0e8;font-size:14px;font-weight:700;font-family:inherit">🖨 印刷</button>
+    </div>
+    <div id="photo-body"></div>
+  </div>
+</div>
+
 <div class="overlay" id="cdwarn-modal">
   <div class="modal">
     <div style="text-align:center;font-size:32px;margin-bottom:8px">📅</div>
@@ -660,7 +738,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v56";
+const APP_VERSION = "v60";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -695,9 +773,14 @@ async function fsGetServer(key) {
   }
 }
 async function fsSet(key, value) {
+  // ★失敗を握りつぶさない。ここで黙って成功を返すと、呼び出し元が
+  //   「保存できた」と誤認し、画面だけ更新されて実際は書けていない状態になる。
   try {
     await window._fsSetDoc(window._fsDoc(window._firestore, "scanner", key), { value });
-  } catch(e) { console.error("fsSet error", e); }
+  } catch(e) {
+    console.error("fsSet error", key, e);
+    throw e;
+  }
 }
 
 // ── 月別シャーディング ────────────────────────────────────────────────────────
@@ -812,7 +895,7 @@ async function loadAllHistory() {
 
       // インデックスに不足があれば修復
       if (scannedKeys.some(k => !indexKeys.includes(k))) {
-        await fsSet("history_index", allKeys);
+        try { await fsSet("history_index", allKeys); } catch(e) { console.warn("索引の修復に失敗（読み込みは続行）", e); }
       }
 
       historyLoaded = true;
@@ -855,6 +938,8 @@ function toggleReadOnly() {
 }
 
 function applyReadOnly() {
+  const addBox = document.getElementById("pend-add-box");
+  if (addBox) addBox.style.display = readOnly ? "none" : "block";
   const badge = document.getElementById("ro-badge");
   if (badge) badge.style.display = readOnly ? "inline-block" : "none";
 
@@ -1151,6 +1236,7 @@ async function init() {
   } finally {
     window._bootDone = true;
     startLastWriteWatch();
+    loadPending();
     clearTimeout(window._bootWatchdog);
     // ★起動が終わったら、遅延の警告バナーは自動で消す
     const w = document.getElementById("boot-warn");
@@ -1227,6 +1313,7 @@ function switchTab(tab) {
   document.getElementById("recent-bar").style.display = (tab==="scan" && history.length>0) ? "flex" : "none";
   if(tab==="settings") updateStats();
   if(tab==="history") renderHistView();
+  if(tab==="pending") { renderPending(); loadPending(); }
 }
 
 // ── 履歴サブタブ ──────────────────────────────────────────────────────────
@@ -2229,6 +2316,318 @@ function startLastWriteWatch() {
   setInterval(() => { if (!document.hidden) fetchLastWrite(); }, 120000);
 }
 
+
+
+// ── 緑伝票（作業依頼書）の写真 ──────────────────────────────────────────────
+// 1枚ずつ別のドキュメントに保存する。発行待ちの一覧に混ぜると
+// 1MBの上限にすぐ届いてしまうため、見るときだけ読み込む。
+let _pendingPhotoBuf = null;   // 追加前に撮った写真を一時的に持つ
+
+async function compressPhoto(file, maxPx, quality) {
+  const dataUrl = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file);
+  });
+  const img = await new Promise((res, rej) => {
+    const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl;
+  });
+  const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(img.width * scale);
+  cv.height = Math.round(img.height * scale);
+  cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+  let out = cv.toDataURL("image/jpeg", quality);
+  // 1ドキュメント1MBの上限に余裕を持たせる
+  let q = quality;
+  while (out.length > 700000 && q > 0.3) { q -= 0.12; out = cv.toDataURL("image/jpeg", q); }
+  return out;
+}
+
+async function onPendingPhotoPicked(ev) {
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value = "";
+  if (!f) return;
+  const st = document.getElementById("pd-photo-state");
+  if (st) { st.style.display = "block"; st.textContent = "📷 写真を準備中…"; }
+  try {
+    // 印刷して再提出するため、細かい品番まで読める画質にする
+    _pendingPhotoBuf = await compressPhoto(f, 1600, 0.7);
+    const kb = Math.round(_pendingPhotoBuf.length / 1024);
+    if (st) st.innerHTML = `<span style="color:#4ade80">📷 緑伝票を添付しました（約${kb}KB）</span>
+      <button onclick="clearPendingPhoto()" style="margin-left:8px;background:#1a2942;border:1px solid #2a4070;border-radius:6px;padding:3px 9px;color:#7a9cc8;font-size:11px;font-family:inherit">取り消す</button>`;
+  } catch(e) {
+    _pendingPhotoBuf = null;
+    if (st) st.innerHTML = `<span style="color:#f87171">写真を読み込めませんでした</span>`;
+  }
+}
+function clearPendingPhoto() {
+  _pendingPhotoBuf = null;
+  const st = document.getElementById("pd-photo-state");
+  if (st) { st.style.display = "none"; st.textContent = ""; }
+}
+
+
+// iPhoneでは共有シートから印刷・写真保存・LINE送信まで一度にできる
+async function shareGreenSlip() {
+  const img = document.getElementById("gs-img");
+  if (!img) return;
+  const name = `緑伝票_${_gsFrame || "写真"}.jpg`;
+  try {
+    const blob = await (await fetch(img.src)).blob();
+    const file = new File([blob], name, { type: "image/jpeg" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: `緑伝票 ${_gsFrame}` });
+      return;
+    }
+  } catch(e) {
+    if (e && e.name === "AbortError") return;   // 本人が共有をやめただけ
+  }
+  // 共有に対応していない場合はダウンロードで代用
+  const a = document.createElement("a");
+  a.href = img.src; a.download = name; a.click();
+}
+
+function printGreenSlip() {
+  const img = document.getElementById("gs-img");
+  if (!img) return;
+  // 横長の伝票を縦向きで刷ると小さくなるので、向きを合わせる
+  const landscape = img.naturalWidth >= img.naturalHeight;
+  let st = document.getElementById("print-orient");
+  if (!st) { st = document.createElement("style"); st.id = "print-orient"; document.head.appendChild(st); }
+  st.textContent = `@page { size: A4 ${landscape ? "landscape" : "portrait"}; margin: 8mm; }`;
+  document.getElementById("print-area").innerHTML = `<img src="${img.src}" style="display:block;width:100%">`;
+  window.print();
+}
+
+let _gsFrame = "";
+async function showGreenSlip(id, frame) {
+  _gsFrame = frame || "";
+  const ov = document.getElementById("photo-viewer");
+  const bd = document.getElementById("photo-body");
+  const ttl = document.getElementById("gs-title");
+  if (ttl) ttl.textContent = `📗 緑伝票　${_gsFrame}`;
+  const act = document.getElementById("gs-actions");
+  if (act) act.style.display = "none";
+  ov.classList.add("show");
+  bd.innerHTML = `<div style="color:#7a9cc8;font-size:13px;padding:28px;text-align:center">読み込み中…</div>`;
+  try {
+    const v = await fsGet("pending_photo_" + id);
+    if (!v) {
+      bd.innerHTML = `<div style="color:#7a9cc8;font-size:13px;padding:28px;text-align:center">写真は登録されていません</div>`;
+      return;
+    }
+    bd.innerHTML = `<img id="gs-img" src="${v}" style="width:100%;border-radius:10px;display:block">`;
+    const act2 = document.getElementById("gs-actions");
+    if (act2) act2.style.display = "flex";
+  } catch(e) {
+    bd.innerHTML = `<div style="color:#f87171;font-size:13px;padding:28px;text-align:center">写真を読み込めませんでした</div>`;
+  }
+}
+function closeGreenSlip() { document.getElementById("photo-viewer").classList.remove("show"); }
+
+
+// ── 未発行の表示とポップアップ ─────────────────────────────────────────────
+function renderPendingBanner() {
+  const el = document.getElementById("pend-banner");
+  if (!el) return;
+  if (pendingList.length === 0) { el.style.display = "none"; return; }
+  const oldest = [...pendingList].sort((a,b) => new Date(a.added_at) - new Date(b.added_at))[0];
+  const days = Math.floor((Date.now() - new Date(oldest.added_at).getTime()) / 86400000);
+  const urgent = days > 7;
+  el.style.display = "block";
+  el.style.background = urgent ? "rgba(239,68,68,0.14)" : "rgba(245,158,11,0.12)";
+  el.style.borderColor = urgent ? "#7f1d1d" : "rgba(245,158,11,0.4)";
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:8px">
+      <div style="font-size:17px">${urgent ? "🔴" : "⏳"}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:800;color:${urgent ? "#f87171" : "#fbbf24"}">未発行あり ${pendingList.length}件</div>
+        <div style="font-size:11px;color:#7a9cc8;margin-top:1px">最長 ${days <= 0 ? "今日" : days + "日"} 待ち${urgent ? "・催促したほうがよさそうです" : ""}</div>
+      </div>
+      <div style="font-size:11px;color:#7a9cc8;white-space:nowrap">開く ›</div>
+    </div>`;
+}
+
+function openPendingPopup(afterScan) {
+  if (pendingList.length === 0) return;
+  const body = document.getElementById("pendpop-body");
+  const title = document.getElementById("pendpop-title");
+  title.textContent = afterScan ? "この伝票は発行待ちのものですか？" : `未発行 ${pendingList.length}件`;
+  const sorted = [...pendingList].sort((a,b) => new Date(a.added_at) - new Date(b.added_at));
+  body.innerHTML = sorted.map(p => {
+    const days = Math.floor((Date.now() - new Date(p.added_at).getTime()) / 86400000);
+    const old = days > 7;
+    return `<div style="background:#0d1829;border:1px solid ${old ? "#7f1d1d" : "#2a4070"};border-radius:10px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="font-size:17px;font-weight:900;color:#f0c744;letter-spacing:1px">🚗 ${p.frame_number}</div>
+        ${p.company ? `<span class="co-badge-${p.company}">${p.company === "chiba" ? "🟥 千葉トヨタ" : "🟦 ネッツトヨタ"}</span>` : ""}
+      </div>
+      ${p.note ? `<div style="font-size:12px;color:#c7d4e6;margin-top:5px">${String(p.note).replace(/</g,"&lt;")}</div>` : ""}
+      <div style="font-size:11px;color:${old ? "#f87171" : "#5a7aa8"};margin-top:4px">${old ? "⚠️ " : ""}${days <= 0 ? "今日" : days + "日前"}に登録</div>
+      <div style="display:flex;gap:6px;margin-top:10px">
+        ${p.has_photo ? `<button onclick="showGreenSlip(${p.id},'${String(p.frame_number).replace(/'/g,"")}')" style="flex:1;background:#1e3050;border:1px solid #2a4070;border-radius:8px;padding:10px;color:#9fc0e8;font-size:12px;font-weight:700;font-family:inherit">📗 緑伝票を見る</button>` : ""}
+        ${afterScan
+          ? `<button onclick="matchPending(${p.id})" style="flex:1;background:linear-gradient(135deg,#16a34a,#15803d);border:none;border-radius:8px;padding:10px;color:#fff;font-size:12px;font-weight:800;font-family:inherit">✅ これと一致</button>`
+          : `<button onclick="removePending(${p.id},'manual')" style="flex:1;background:#1a2942;border:1px solid #2a4070;border-radius:8px;padding:10px;color:#7a9cc8;font-size:12px;font-weight:700;font-family:inherit">外す</button>`}
+      </div>
+    </div>`;
+  }).join("");
+  document.getElementById("pendpop-close").textContent = afterScan ? "該当なし（閉じる）" : "✕ 閉じる";
+  document.getElementById("pend-popup").classList.add("show");
+}
+function closePendingPopup() { document.getElementById("pend-popup").classList.remove("show"); }
+
+// ポップアップで「これと一致」を押したとき
+async function matchPending(id) {
+  await removePending(id, "manual-match");
+  closePendingPopup();
+  showToastMsg("✅ 発行待ちから外しました");
+}
+
+// ── 発行待ちリスト ─────────────────────────────────────────────────────────
+// 注文書がまだ発行されていない車両を控えておき、
+// 発行された注文書をスキャンした時点でフレーム番号の一致で自動的に消す。
+let pendingList = [];
+
+async function loadPending() {
+  try {
+    const v = await fsGetServer("pending_orders").catch(() => fsGet("pending_orders"));
+    pendingList = Array.isArray(v) ? v : [];
+  } catch(e) { pendingList = []; }
+  renderPending();
+}
+
+// サーバーの最新を読んでから書き戻す。
+// 事務員さんとPCの両方が触る可能性があるため、丸ごと上書きしない。
+async function savePending(mutate) {
+  if (blockIfReadOnly()) return false;
+  try {
+    const cur = await fsGetServer("pending_orders").catch(() => []);
+    const arr = Array.isArray(cur) ? cur.slice() : [];
+    const next = mutate(arr);
+    await fsSet("pending_orders", next);
+    pendingList = next;
+    renderPending();
+    return true;
+  } catch(e) {
+    logEvent("SAVE_ERR", "発行待ちリストの保存に失敗: " + ((e && e.message) || e));
+    alert("発行待ちリストを保存できませんでした。\n\n通信状況を確認して、もう一度お試しください。");
+    return false;
+  }
+}
+
+// 比較用に揃える。数字以外を落とし、先頭のゼロも無視する。
+// 実際のフレーム番号は7桁で先頭にゼロが付くことが多く、
+// 打ち忘れただけで一致しないのを防ぐため。
+function normFrame(s) {
+  const d = String(s || "").replace(/[^0-9]/g, "");
+  return d.replace(/^0+/, "") || d;
+}
+
+async function addPending() {
+  if (blockIfReadOnly()) return;
+  const frame = normFrame(document.getElementById("pd-frame").value);
+  const note  = document.getElementById("pd-note").value.trim();
+  const co    = document.getElementById("pd-co").value;
+  if (frame.length < 6) {
+    alert("フレーム番号を確認してください。\n作業依頼書の大きい数字（7桁）です。");
+    return;
+  }
+  if (pendingList.some(p => normFrame(p.frame_number) === frame)) {
+    alert("そのフレーム番号は、すでに発行待ちに入っています。");
+    return;
+  }
+  const item = {
+    id: Date.now(),
+    frame_number: frame,
+    note, company: co || "",
+    added_at: new Date().toISOString(),
+    added_by: getDeviceLabel()
+  };
+  item.has_photo = !!_pendingPhotoBuf;
+  // 写真を先に保存する。リスト側だけ登録されて写真が無い状態を避ける。
+  if (_pendingPhotoBuf) {
+    try { await fsSet("pending_photo_" + item.id, _pendingPhotoBuf); }
+    catch(e) {
+      item.has_photo = false;
+      alert("写真の保存に失敗しました。リストには登録しますが、写真は付きません。");
+    }
+  }
+  const ok = await savePending(arr => arr.concat([item]));
+  if (!ok) return;
+  logEvent("PENDING_ADD", `${frame} を発行待ちに追加${note ? "（" + note + "）" : ""}${item.has_photo ? " 写真あり" : ""}`);
+  document.getElementById("pd-frame").value = "";
+  document.getElementById("pd-note").value = "";
+  clearPendingPhoto();
+  showToastMsg("📋 発行待ちに追加しました");
+}
+
+async function removePending(id, reason) {
+  const t = pendingList.find(p => p.id === id);
+  if (!t) return;
+  if (reason === "manual" && !confirm(`${t.frame_number} を発行待ちから外しますか？`)) return;
+  const ok = await savePending(arr => arr.filter(p => p.id !== id));
+  if (!ok) return;
+  if (t.has_photo) { try { await fsSet("pending_photo_" + t.id, ""); } catch(e) {} }
+  logEvent("PENDING_DONE", `${t.frame_number} を発行待ちから削除（${reason === "scanned" ? "スキャンで自動" : reason === "manual-match" ? "手動で一致" : "手動"}）`);
+}
+
+// スキャン保存後に呼ぶ。フレーム番号が一致する発行待ちを自動で消す。
+async function checkPendingMatch(entry) {
+  if (readOnly) return;
+  const f = normFrame(entry && entry.frame_number);
+  // ★フレーム番号が読めなかった場合だけ、手動で照合してもらう。
+  //   読めていて一致しないなら別の車なので、毎回ポップアップは出さない。
+  if (!f || f.length < 6) {
+    if (pendingList.length > 0) setTimeout(() => openPendingPopup(true), 600);
+    return;
+  }
+  const hit = pendingList.find(p => normFrame(p.frame_number) === f);
+  if (!hit) return;
+  const ok = await savePending(arr => arr.filter(p => normFrame(p.frame_number) !== f));
+  if (!ok) return;
+  if (hit.has_photo) { try { await fsSet("pending_photo_" + hit.id, ""); } catch(e) {} }
+  logEvent("PENDING_DONE", `${hit.frame_number} を発行待ちから自動削除（${entry.slip_number}）`);
+  showToastMsg(`✅ 発行待ちの ${hit.frame_number} が発行されました`);
+}
+
+function daysSince(iso) {
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  return d <= 0 ? "今日" : `${d}日前`;
+}
+
+function renderPending() {
+  renderPendingBanner();
+  const badge = document.getElementById("pend-badge");
+  if (badge) {
+    badge.textContent = pendingList.length;
+    badge.style.display = pendingList.length ? "inline-block" : "none";
+  }
+  const el = document.getElementById("pend-list");
+  if (!el) return;
+  if (pendingList.length === 0) {
+    el.innerHTML = `<div style="text-align:center;padding:28px 12px;color:#5a7aa8;font-size:13px;line-height:1.8">
+      発行待ちはありません<br><span style="font-size:11px">注文書が無い車両を、下から登録できます</span></div>`;
+    return;
+  }
+  const sorted = [...pendingList].sort((a,b) => new Date(a.added_at) - new Date(b.added_at));
+  el.innerHTML = sorted.map(p => {
+    const old = (Date.now() - new Date(p.added_at).getTime()) > 7 * 86400000;
+    return `<div style="background:#111f38;border:1px solid ${old ? "#7f1d1d" : "#2a4070"};border-radius:10px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="font-size:18px;font-weight:900;color:#f0c744;letter-spacing:1px">🚗 ${p.frame_number}</div>
+        ${p.company ? `<span class="co-badge-${p.company}">${p.company === "chiba" ? "🟥 千葉トヨタ" : "🟦 ネッツトヨタ"}</span>` : ""}
+        <div style="flex:1"></div>
+        <button onclick="removePending(${p.id},'manual')" style="background:#1a2942;border:1px solid #2a4070;border-radius:7px;padding:6px 10px;color:#7a9cc8;font-size:11px;font-weight:700;font-family:inherit">外す</button>
+      </div>
+      ${p.has_photo ? `<button onclick="showGreenSlip(${p.id},'${String(p.frame_number).replace(/'/g,"")}')" style="width:100%;margin-top:9px;background:#1e3050;border:1px solid #2a4070;border-radius:8px;padding:11px;color:#9fc0e8;font-size:13px;font-weight:700;font-family:inherit">📗 緑伝票を見る・印刷</button>` : ""}
+      ${p.note ? `<div style="font-size:12px;color:#c7d4e6;margin-top:6px">${p.note.replace(/</g,"&lt;")}</div>` : ""}
+      <div style="font-size:11px;color:${old ? "#f87171" : "#5a7aa8"};margin-top:6px">
+        ${old ? "⚠️ " : ""}${daysSince(p.added_at)}に登録${p.added_by ? " ・ " + p.added_by : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
 function initDrum(date, isOCR) {
   const monthList = buildMonthList();
   const targetYear = date.getFullYear();
@@ -2726,6 +3125,7 @@ async function saveEntry(entry) {
   updateHeader(); updateRecentBar(); renderHistory();
   isSaving = false;
   lockSaveButton(false);
+  checkPendingMatch(entry);   // 発行待ちに入っていれば自動で消す
   return true;
 }
 
