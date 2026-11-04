@@ -231,7 +231,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v60</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v62</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -738,7 +738,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v60";
+const APP_VERSION = "v62";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -2318,6 +2318,61 @@ function startLastWriteWatch() {
 
 
 
+
+// ── 発行待ちから外れたものの控え ───────────────────────────────────────────
+// 消えた理由が分からないと不安なので、外れたものは記録して
+// 一覧の下に残す。間違いなら「戻す」で復活できる。
+let pendingArchive = [];
+async function loadPendingArchive() {
+  try {
+    const v = await fsGetServer("pending_archive");
+    pendingArchive = Array.isArray(v) ? v : [];
+  } catch(e) { /* 控えは読めなくても業務は止めない */ }
+}
+async function archivePending(item, reason) {
+  try {
+    const cur = await fsGetServer("pending_archive").catch(() => pendingArchive);
+    const arr = Array.isArray(cur) ? cur.slice() : [];
+    arr.unshift({ ...item, removed_at: new Date().toISOString(),
+                  removed_by: getDeviceLabel(), reason });
+    const next = arr.slice(0, 50);
+    await fsSet("pending_archive", next);
+    pendingArchive = next;
+  } catch(e) { console.warn("控えの保存に失敗", e); }
+}
+function reasonLabel(r) {
+  return r === "scanned" ? "スキャンで自動"
+       : r === "manual-match" ? "手動で一致"
+       : r === "manual" ? "手動で外した" : String(r || "");
+}
+function renderArchive() {
+  if (!pendingArchive || pendingArchive.length === 0) return "";
+  const rows = pendingArchive.slice(0, 5).map(a => {
+    const t = new Date(a.removed_at);
+    const when = `${t.getMonth()+1}/${t.getDate()} ${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid #1e3050">
+      <div style="font-size:13px;font-weight:800;color:#7a9cc8;letter-spacing:1px">${a.frame_number}</div>
+      <div style="flex:1;min-width:0;font-size:10px;color:#5a7aa8">${when} ・ ${reasonLabel(a.reason)}${a.removed_by ? " ・ " + a.removed_by : ""}</div>
+      ${readOnly ? "" : `<button onclick="restorePending(${a.id})" style="background:#1a2942;border:1px solid #2a4070;border-radius:6px;padding:5px 10px;color:#9fc0e8;font-size:11px;font-weight:700;font-family:inherit">戻す</button>`}
+    </div>`;
+  }).join("");
+  return `<div style="margin-top:16px;background:#0d1829;border:1px solid #1e3050;border-radius:10px;overflow:hidden">
+    <div style="font-size:11px;font-weight:800;color:#7a9cc8;padding:10px">最近 発行待ちから外れたもの</div>
+    ${rows}</div>`;
+}
+async function restorePending(id) {
+  if (blockIfReadOnly()) return;
+  const a = (pendingArchive || []).find(x => x.id === id);
+  if (!a) return;
+  if (!confirm(`${a.frame_number} を発行待ちに戻しますか？`)) return;
+  const { removed_at, removed_by, reason, ...item } = a;
+  const ok = await savePending(arr =>
+    arr.some(p => p.id === item.id) ? arr : arr.concat([item]));
+  if (!ok) return;
+  logEvent("PENDING_RESTORE", `${a.frame_number} を発行待ちに戻した`);
+  showToastMsg("↩️ 発行待ちに戻しました");
+}
+
 // ── 緑伝票（作業依頼書）の写真 ──────────────────────────────────────────────
 // 1枚ずつ別のドキュメントに保存する。発行待ちの一覧に混ぜると
 // 1MBの上限にすぐ届いてしまうため、見るときだけ読み込む。
@@ -2488,11 +2543,23 @@ async function matchPending(id) {
 // 発行された注文書をスキャンした時点でフレーム番号の一致で自動的に消す。
 let pendingList = [];
 
+let pendingLoaded = false;   // 読めたのか、読めなかったのかを区別する
 async function loadPending() {
   try {
-    const v = await fsGetServer("pending_orders").catch(() => fsGet("pending_orders"));
+    const v = await fsGetServer("pending_orders");
     pendingList = Array.isArray(v) ? v : [];
-  } catch(e) { pendingList = []; }
+    pendingLoaded = true;
+    if (window._pendingLoggedOnce !== pendingList.length) {
+      window._pendingLoggedOnce = pendingList.length;
+      logEvent("PENDING_LOAD", `発行待ち ${pendingList.length}件を読込`);
+    }
+  } catch(e) {
+    // ★読めなかっただけなのに「0件」と出すと、消えたと誤解させる。
+    //   履歴で起きたのと同じ間違いなので、ここでは区別し、ログにも残す。
+    pendingLoaded = false;
+    logEvent("PENDING_LOAD_FAIL", "発行待ちを読み込めませんでした: " + ((e && e.message) || e));
+  }
+  loadPendingArchive();
   renderPending();
 }
 
@@ -2501,7 +2568,17 @@ async function loadPending() {
 async function savePending(mutate) {
   if (blockIfReadOnly()) return false;
   try {
-    const cur = await fsGetServer("pending_orders").catch(() => []);
+    // ★サーバーの読み取りに失敗したら、絶対に書き込まない。
+    //   以前ここは失敗時に空配列を使っていたため、通信が一瞬切れただけで
+    //   「空のリストに1件足す」＝ 既存の発行待ちが全部消える、という事故が起きる。
+    let cur;
+    try {
+      cur = await fsGetServer("pending_orders");
+    } catch(readErr) {
+      logEvent("PENDING_ABORT", "読み取りに失敗したため書き込みを中止");
+      alert("通信を確認できなかったため、変更を保存しませんでした。\n\nもう一度お試しください。");
+      return false;
+    }
     const arr = Array.isArray(cur) ? cur.slice() : [];
     const next = mutate(arr);
     await fsSet("pending_orders", next);
@@ -2567,7 +2644,8 @@ async function removePending(id, reason) {
   if (reason === "manual" && !confirm(`${t.frame_number} を発行待ちから外しますか？`)) return;
   const ok = await savePending(arr => arr.filter(p => p.id !== id));
   if (!ok) return;
-  if (t.has_photo) { try { await fsSet("pending_photo_" + t.id, ""); } catch(e) {} }
+  await archivePending(t, reason);
+  // ★写真は消さずに残す。間違って外したときに「戻す」で復元できるように。
   logEvent("PENDING_DONE", `${t.frame_number} を発行待ちから削除（${reason === "scanned" ? "スキャンで自動" : reason === "manual-match" ? "手動で一致" : "手動"}）`);
 }
 
@@ -2585,7 +2663,7 @@ async function checkPendingMatch(entry) {
   if (!hit) return;
   const ok = await savePending(arr => arr.filter(p => normFrame(p.frame_number) !== f));
   if (!ok) return;
-  if (hit.has_photo) { try { await fsSet("pending_photo_" + hit.id, ""); } catch(e) {} }
+  await archivePending(hit, "scanned");
   logEvent("PENDING_DONE", `${hit.frame_number} を発行待ちから自動削除（${entry.slip_number}）`);
   showToastMsg(`✅ 発行待ちの ${hit.frame_number} が発行されました`);
 }
@@ -2604,9 +2682,19 @@ function renderPending() {
   }
   const el = document.getElementById("pend-list");
   if (!el) return;
+  if (!pendingLoaded) {
+    el.innerHTML = `<div style="text-align:center;padding:24px 12px;color:#fbbf24;font-size:13px;line-height:1.8;
+        background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:10px">
+      ⚠️ 発行待ちを読み込めませんでした<br>
+      <span style="font-size:11px;color:#7a9cc8">0件という意味ではありません。通信を確認してください</span><br>
+      <button onclick="loadPending()" style="margin-top:10px;background:#1e3050;border:1px solid #2a4070;border-radius:8px;padding:9px 16px;color:#9fc0e8;font-size:12px;font-weight:700;font-family:inherit">🔄 もう一度読み込む</button>
+    </div>`;
+    return;
+  }
   if (pendingList.length === 0) {
     el.innerHTML = `<div style="text-align:center;padding:28px 12px;color:#5a7aa8;font-size:13px;line-height:1.8">
-      発行待ちはありません<br><span style="font-size:11px">注文書が無い車両を、下から登録できます</span></div>`;
+      発行待ちはありません<br><span style="font-size:11px">注文書が無い車両を、下から登録できます</span></div>`
+      + renderArchive();
     return;
   }
   const sorted = [...pendingList].sort((a,b) => new Date(a.added_at) - new Date(b.added_at));
@@ -2625,7 +2713,7 @@ function renderPending() {
         ${old ? "⚠️ " : ""}${daysSince(p.added_at)}に登録${p.added_by ? " ・ " + p.added_by : ""}
       </div>
     </div>`;
-  }).join("");
+  }).join("") + renderArchive();
 }
 
 function initDrum(date, isOCR) {
