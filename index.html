@@ -231,7 +231,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 <div class="header">
   <div class="header-inner">
     <div class="logo">伝</div>
-    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v62</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
+    <div class="app-title">注文書スキャナー <span style="font-size:10px;font-weight:600;color:#5a7aa8;background:#1e3050;border-radius:4px;padding:1px 6px;vertical-align:middle">v63</span><span id="ro-badge" style="display:none;font-size:10px;font-weight:800;color:#0a1424;background:#f0c744;border-radius:4px;padding:2px 7px;margin-left:6px;vertical-align:middle">👁 閲覧専用</span></div>
     <div class="total-badge">
       <div class="total-num" id="hd-count">0<span class="total-unit">枚</span></div>
       <div class="total-amt" id="hd-amt">0円(税抜)</div>
@@ -499,6 +499,15 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
       <button onclick="addPending()" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);border:none;border-radius:11px;color:#fff;font-size:15px;font-weight:800;font-family:inherit">＋ 発行待ちに追加</button>
     </div>
+
+    <div style="background:#0d1829;border:1px solid #1e3050;border-radius:12px;padding:14px;margin-top:14px">
+      <div style="font-size:12px;font-weight:800;color:#e8edf5;margin-bottom:4px">🔍 消えた緑伝票を探す</div>
+      <div style="font-size:11px;color:#7a9cc8;line-height:1.7;margin-bottom:10px">
+        一覧から消えてしまっても、写真だけ残っていることがあります。
+      </div>
+      <button onclick="findOrphanPhotos()" style="width:100%;padding:12px;background:#1e3050;border:1px solid #2a4070;border-radius:10px;color:#9fc0e8;font-size:13px;font-weight:700;font-family:inherit">残っている写真を調べる</button>
+      <div id="orphan-result" style="display:none;margin-top:10px;background:#111f38;border:1px solid #2a4070;border-radius:10px;overflow:hidden"></div>
+    </div>
   </div>
 
   <div class="page" id="page-settings">
@@ -738,7 +747,7 @@ body{background:#0d1829;color:#e8edf5;font-family:'Hiragino Kaku Gothic ProN','N
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "v62";
+const APP_VERSION = "v63";
 let history = [];
 let taxRate = 10;
 let deleteTargetId = null;
@@ -1201,7 +1210,11 @@ function logEvent(type, detail) {
   const local = (lsGet("oplog") || []).concat([rec]).slice(-200);
   lsSet("oplog", local);
   console.log(`[LOG ${type}]`, detail);
-  queueLogFlush();
+  // ★後から原因を追うための記録は、3秒待たずにすぐ書き出す。
+  //   直後にアプリを閉じると、ためている間の記録ごと消えてしまうため。
+  const URGENT = ["PENDING_ADD","PENDING_DONE","PENDING_RESTORE","PENDING_ABORT",
+                  "PENDING_LOAD_FAIL","DELETE","UNDO","SAVE_ERR","LOAD_FAIL","CD_BULK_FIX"];
+  if (URGENT.includes(type)) { flushLog(); } else { queueLogFlush(); }
   } catch(e) { console.warn("logEvent失敗:", e); }
 }
 
@@ -1210,6 +1223,9 @@ function queueLogFlush() {
   if (logFlushTimer) clearTimeout(logFlushTimer);
   logFlushTimer = setTimeout(flushLog, 3000); // まとめて書いて通信を減らす
 }
+// アプリを閉じる・切り替えるときに、ためている分を取りこぼさない
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushLog(); });
+window.addEventListener("pagehide", () => { try { flushLog(); } catch(e) {} });
 
 async function flushLog() {
   if (logBuffer.length === 0) return;
@@ -2370,6 +2386,70 @@ async function restorePending(id) {
     arr.some(p => p.id === item.id) ? arr : arr.concat([item]));
   if (!ok) return;
   logEvent("PENDING_RESTORE", `${a.frame_number} を発行待ちに戻した`);
+  showToastMsg("↩️ 発行待ちに戻しました");
+}
+
+
+// ── 迷子になった緑伝票の救出 ───────────────────────────────────────────────
+// 発行待ちの一覧だけが消えても、写真は別のドキュメントに残っている。
+// コレクションを調べて、一覧に紐づいていない写真を見つけ出す。
+async function findOrphanPhotos() {
+  const el = document.getElementById("orphan-result");
+  el.style.display = "block";
+  el.innerHTML = `<div style="color:#7a9cc8;font-size:12px;padding:10px">🔍 調べています…</div>`;
+  try {
+    // キャッシュではなくサーバーを直接見る（消えた直後は手元が古いため）
+    const col = window._fsCollection(window._firestore, "scanner");
+    const snap = window._fsGetDocsFromServer
+      ? await window._fsGetDocsFromServer(col)
+      : await window._fsGetDocs(col);
+    const known = new Set((pendingList || []).map(p => "pending_photo_" + p.id));
+    const found = [];
+    snap.forEach(d => {
+      if (!/^pending_photo_/.test(d.id)) return;
+      if (known.has(d.id)) return;                 // いま一覧にある分は対象外
+      const v = d.data() && d.data().value;
+      if (typeof v === "string" && v.length > 1000) {   // 空にされた分は除く
+        found.push({ key: d.id, id: Number(d.id.replace("pending_photo_","")), data: v });
+      }
+    });
+    window._orphans = found;
+    if (found.length === 0) {
+      el.innerHTML = `<div style="color:#7a9cc8;font-size:12px;padding:10px;line-height:1.7">
+        見つかりませんでした。<br>写真も一緒に失われています。事務員さんに撮り直しを頼んでください。</div>`;
+      return;
+    }
+    el.innerHTML = `<div style="font-size:12px;color:#4ade80;font-weight:700;padding:8px 10px">
+        ${found.length}件の緑伝票が残っていました</div>` +
+      found.map((f,i) => {
+        const t = new Date(f.id);
+        const when = isNaN(t) ? "" : `${t.getMonth()+1}/${t.getDate()} ${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}`;
+        return `<div style="border-top:1px solid #1e3050;padding:10px">
+          <div style="font-size:11px;color:#7a9cc8;margin-bottom:6px">${when ? when + " に登録されたもの" : f.key}</div>
+          <img src="${f.data}" style="width:100%;border-radius:8px;display:block">
+          ${readOnly ? `<div style="font-size:11px;color:#fbbf24;margin-top:8px">閲覧専用のため戻せません。写真は長押しで保存できます</div>`
+            : `<button onclick="restoreOrphan(${i})" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#16a34a,#15803d);border:none;border-radius:8px;padding:11px;color:#fff;font-size:13px;font-weight:800;font-family:inherit">この伝票を発行待ちに戻す</button>`}
+        </div>`;
+      }).join("");
+  } catch(e) {
+    el.innerHTML = `<div style="color:#f87171;font-size:12px;padding:10px">調べられませんでした：${(e && e.message) || e}</div>`;
+  }
+}
+
+async function restoreOrphan(idx) {
+  if (blockIfReadOnly()) return;
+  const f = (window._orphans || [])[idx];
+  if (!f) return;
+  const frame = prompt("写真のフレーム番号（大きい数字）を入力してください");
+  if (!frame) return;
+  const digits = String(frame).replace(/[^0-9]/g, "");
+  if (digits.length < 6) { alert("フレーム番号を確認してください。"); return; }
+  const item = { id: f.id, frame_number: digits, note: "写真から復元", company: "",
+                 added_at: new Date(f.id).toISOString(), added_by: getDeviceLabel(), has_photo: true };
+  const ok = await savePending(arr => arr.some(p => p.id === item.id) ? arr : arr.concat([item]));
+  if (!ok) return;
+  logEvent("PENDING_RESTORE", `${digits} を写真から復元`);
+  document.getElementById("orphan-result").style.display = "none";
   showToastMsg("↩️ 発行待ちに戻しました");
 }
 
